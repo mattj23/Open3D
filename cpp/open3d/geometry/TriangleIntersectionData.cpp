@@ -92,5 +92,29 @@ std::pair<bool, Eigen::Vector3d>TriangleIntersectionData::Intersect(
     return {true, i_point};
 }
 
+AxisAlignedBoundingBox TriangleIntersectionData::GetBoundingBox() const {
+    // Reconstruct the original v1 and v2 vertices
+    auto v1 = v0_ + u_;
+    auto v2 = v0_ + v_;
+
+    // Because there are only three points here, the overhead of creating a
+    // std::vector in order to use AxisAlignedBoundingBox::CreateFromPoints
+    // ends up taking about 4x longer than nesting std::min and std::max
+
+    Eigen::Vector3d max_bound{
+            std::max(std::max(v0_.x(), v1.x()), v2.x()),
+            std::max(std::max(v0_.y(), v1.y()), v2.y()),
+            std::max(std::max(v0_.z(), v1.z()), v2.z())
+    };
+
+    Eigen::Vector3d min_bound{
+            std::min(std::min(v0_.x(), v1.x()), v2.x()),
+            std::min(std::min(v0_.y(), v1.y()), v2.y()),
+            std::min(std::min(v0_.z(), v1.z()), v2.z())
+    };
+
+    return {min_bound, max_bound};
+}
+
 }
 }

@@ -26,6 +26,7 @@
 
 #pragma once
 #include <Eigen/Dense>
+#include "BoundingVolume.h"
 
 namespace open3d {
 namespace geometry {
@@ -61,6 +62,10 @@ public:
             const Eigen::ParametrizedLine<double, 3>& line,
             bool is_ray,
             bool is_segment);
+
+    /// \brief Calculates the axis aligned bounding box for the underlying
+    /// triangle
+    AxisAlignedBoundingBox GetBoundingBox() const;
 
 public:
 
