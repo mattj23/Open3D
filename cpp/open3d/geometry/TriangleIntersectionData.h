@@ -26,6 +26,7 @@
 
 #pragma once
 #include <Eigen/Dense>
+
 #include "BoundingVolume.h"
 
 namespace open3d {
@@ -68,7 +69,6 @@ public:
     AxisAlignedBoundingBox GetBoundingBox() const;
 
 public:
-
     Eigen::Vector3d u_;
     Eigen::Vector3d v_;
     Eigen::Vector3d v0_;
@@ -81,10 +81,7 @@ public:
     double d_;
 
     bool is_degenerate_ = false;
-
 };
 
-}
-}
-
-
+}  // namespace geometry
+}  // namespace open3d
