@@ -45,6 +45,31 @@ public:
                                    const Eigen::Vector3d& q1,
                                    const Eigen::Vector3d& q2);
 
+    /// \brief Tests if a line/ray/segment intersects with a triangle that
+    /// consists of three vertices. Use for quick, one-off tests, for multiple
+    /// tests against a triangle or set of triangles, or to recover the point of
+    /// intersection, use the TriangleIntersectionData class.
+    ///
+    /// \param line The parameterized line to test against the triangle. If the
+    /// test is a ray test or a segment test, the origin is important. If the
+    /// test is for a segment, the line origin is the segment start point and
+    /// the direction is the vector to the endpoint. Do not normalize the
+    /// segment direction, as it will then become a segment of length 1.
+    /// \param v0 The root vertex of the triangle
+    /// \param v1 The second vertex of the triangle
+    /// \param v2 The third vertex of the triangle
+    /// \param is_ray Set true to disregard intersections behind the origin
+    /// \param is_segment Set true to disregard intersections that are either
+    /// behind the origin or beyond line.origin() + line.direction(). This flag
+    /// will supersede is_ray.
+    /// \return true if the line intersects.
+    static bool LineTriangle3d(const Eigen::ParametrizedLine<double, 3>& line,
+                               const Eigen::Vector3d& v0,
+                               const Eigen::Vector3d& v1,
+                               const Eigen::Vector3d& v2,
+                               bool is_ray=false,
+                               bool is_segment=false);
+
     static bool TriangleAABB(const Eigen::Vector3d& box_center,
                              const Eigen::Vector3d& box_half_size,
                              const Eigen::Vector3d& vert0,
