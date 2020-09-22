@@ -26,11 +26,13 @@
 
 #pragma once
 
+#include <limits>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+#include "open3d/geometry/BoundingVolume.h"
 #include "open3d/geometry/Geometry.h"
-#include "open3d/utility/Eigen.h"
+#include "open3d/utility/Optional.h"
 
 #pragma once
 
@@ -61,13 +63,22 @@ public:
     const Eigen::Vector3d& Origin() const { return m_origin; }
     const Eigen::Vector3d& Direction() const { return m_direction; }
 
+    utility::optional<double> SlabAABB(const AxisAlignedBoundingBox& box) const;
+    utility::optional<double> ExactAABB(const AxisAlignedBoundingBox& box) const;
+
+
 protected:
     LineBase(const Eigen::Vector3d& origin,
              const Eigen::Vector3d& direction,
              LineType type);
 
 private:
-    LineType line_type_ = LineType::Line;
+    const LineType line_type_ = LineType::Line;
+    double x_inv_;
+    double y_inv_;
+    double z_inv_;
+
+    constexpr static const double limits_[]{std::numeric_limits<double>::min(), 0, 0};
 };
 
 /// \class Line3D

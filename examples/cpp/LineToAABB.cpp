@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "open3d/geometry/IntersectionTest.h"
+#include "open3d/geometry/LineBase.h"
 
 /* This example code performs a stress test of the various line/ray
  * intersections with the AxisAlignedBoundingBox to highlight the different
@@ -73,7 +74,10 @@ public:
     Trial(geometry::AxisAlignedBoundingBox box,
           Eigen::ParametrizedLine<double, 3> hit_line,
           Eigen::ParametrizedLine<double, 3> miss_line)
-        : box_{box}, hit_line_{hit_line}, miss_line_{miss_line} {
+        : box_{box}, hit_line_{hit_line}, miss_line_{miss_line},
+          hit_ray_{hit_line.origin(), hit_line.direction()},
+          miss_ray_{miss_line.origin(), miss_line.direction()}
+    {
         // Precompute the direction inverses for the optimized slab method
         h_x_inv = 1.0 / hit_line_.direction().x();
         h_y_inv = 1.0 / hit_line_.direction().y();
@@ -87,6 +91,9 @@ public:
     geometry::AxisAlignedBoundingBox box_;
     Eigen::ParametrizedLine<double, 3> hit_line_;
     Eigen::ParametrizedLine<double, 3> miss_line_;
+
+    geometry::Ray3D hit_ray_;
+    geometry::Ray3D miss_ray_;
 
     double h_x_inv;
     double h_y_inv;
@@ -120,8 +127,8 @@ int main() {
         }
     }
     auto duration =
-            duration_cast<milliseconds>(high_resolution_clock::now() - start);
-    std::cout << " * took " << static_cast<double>(duration.count()) << " ms\n";
+            duration_cast<microseconds>(high_resolution_clock::now() - start);
+    std::cout << " * exact took " << static_cast<double>(duration.count())/1000. << " ms\n";
     std::cout << " * " << failed_hits << " failed hits\n";
     std::cout << " * " << failed_misses << " failed misses\n";
 
@@ -138,8 +145,8 @@ int main() {
         }
     }
     duration =
-            duration_cast<milliseconds>(high_resolution_clock::now() - start);
-    std::cout << " * took " << static_cast<double>(duration.count()) << " ms\n";
+            duration_cast<microseconds>(high_resolution_clock::now() - start);
+    std::cout << " * slab took " << static_cast<double>(duration.count()) / 1000.<< " ms\n";
     std::cout << " * " << failed_hits << " failed hits\n";
     std::cout << " * " << failed_misses << " failed misses\n";
 
@@ -160,8 +167,26 @@ int main() {
         }
     }
     duration =
-            duration_cast<milliseconds>(high_resolution_clock::now() - start);
-    std::cout << " * took " << static_cast<double>(duration.count()) << " ms\n";
+            duration_cast<microseconds>(high_resolution_clock::now() - start);
+    std::cout << " * slab-precomputed took " << static_cast<double>(duration.count()) / 1000. << " ms\n";
+    std::cout << " * " << failed_hits << " failed hits\n";
+    std::cout << " * " << failed_misses << " failed misses\n";
+
+    std::cout << "\nRunning Class-based slab method" << std::endl;
+    start = high_resolution_clock::now();
+    failed_hits = 0;
+    failed_misses = 0;
+    for (const auto& trial : trials) {
+        if (!trial.hit_ray_.SlabAABB(trial.box_).has_value()) {
+            failed_hits++;
+        }
+        if (trial.miss_ray_.SlabAABB(trial.box_).has_value()) {
+            failed_misses++;
+        }
+    }
+    duration =
+            duration_cast<microseconds>(high_resolution_clock::now() - start);
+    std::cout << " * class-based took " << static_cast<double>(duration.count()) / 1000. << " ms\n";
     std::cout << " * " << failed_hits << " failed hits\n";
     std::cout << " * " << failed_misses << " failed misses\n";
 }
