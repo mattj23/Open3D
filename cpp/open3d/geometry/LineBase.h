@@ -63,7 +63,7 @@ public:
     const Eigen::Vector3d& Origin() const { return m_origin; }
     const Eigen::Vector3d& Direction() const { return m_direction; }
 
-    utility::optional<double> SlabAABB(const AxisAlignedBoundingBox& box) const;
+    virtual utility::optional<double> SlabAABB(const AxisAlignedBoundingBox& box) const;
     double SlabAABBTest(const AxisAlignedBoundingBox& box) const;
     utility::optional<double> ExactAABB(const AxisAlignedBoundingBox& box) const;
 
@@ -73,13 +73,14 @@ protected:
              const Eigen::Vector3d& direction,
              LineType type);
 
-private:
-    const LineType line_type_ = LineType::Line;
     double x_inv_;
     double y_inv_;
     double z_inv_;
 
-    constexpr static const double limits_[]{std::numeric_limits<double>::min(), 0, 0};
+private:
+    const LineType line_type_ = LineType::Line;
+
+//    constexpr static const double limits_[]{std::numeric_limits<double>::min(), 0, 0};
 };
 
 /// \class Line3D
@@ -99,6 +100,7 @@ public:
 class Ray3D : public LineBase {
 public:
     Ray3D(const Eigen::Vector3d& origin, const Eigen::Vector3d& direction);
+    utility::optional<double> SlabAABB(const AxisAlignedBoundingBox& box) const override;
 };
 
 /// \class Segment3D
