@@ -32,18 +32,18 @@ utility::optional<double> LineBase::SlabAABB(
     // Because line_type_ is a const enum, in cases where the line type is
     // known at compile time the optimizer should reduce the function to the
     // necessary options
-    if (line_type_ == LineType::Ray || line_type_ == LineType::Segment) {
+//    if (line_type_ == LineType::Ray || line_type_ == LineType::Segment) {
         t_min = std::max(0., t_min);
 //        t_min = std::max(LineBase::limits_[static_cast<int>(line_type_)], t_min);
-    }
+//    }
 
     // If segment intersections beyond the endpoint of the segment ever stop
     // working, the likely culprit is a change in the underlying Eigen library
     // enforcing normalization on ParametrizedLine's direction
-    if (line_type_ == LineType::Segment) {
-        if (t_max >= t_min && t_min <= 1.) return t_min;
-        return {};
-    }
+//    if (line_type_ == LineType::Segment) {
+//        if (t_max >= t_min && t_min <= 1.) return t_min;
+//        return {};
+//    }
 
     if (t_max >= t_min) return t_min;
     return {};

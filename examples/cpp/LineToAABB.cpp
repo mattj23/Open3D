@@ -186,7 +186,7 @@ int main() {
     }
     duration =
             duration_cast<microseconds>(high_resolution_clock::now() - start);
-    std::cout << " * class-based took " << static_cast<double>(duration.count()) / 1000. << " ms\n";
+    std::cout << " * class-stripped took " << static_cast<double>(duration.count()) / 1000. << " ms\n";
     std::cout << " * " << failed_hits << " failed hits\n";
     std::cout << " * " << failed_misses << " failed misses\n";
 }
