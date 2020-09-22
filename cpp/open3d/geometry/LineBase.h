@@ -64,6 +64,7 @@ public:
     const Eigen::Vector3d& Direction() const { return m_direction; }
 
     utility::optional<double> SlabAABB(const AxisAlignedBoundingBox& box) const;
+    double SlabAABBTest(const AxisAlignedBoundingBox& box) const;
     utility::optional<double> ExactAABB(const AxisAlignedBoundingBox& box) const;
 
 

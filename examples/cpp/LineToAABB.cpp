@@ -177,16 +177,16 @@ int main() {
     failed_hits = 0;
     failed_misses = 0;
     for (const auto& trial : trials) {
-        if (!trial.hit_ray_.SlabAABB(trial.box_).has_value()) {
+        if (std::isnan(trial.hit_ray_.SlabAABBTest(trial.box_))) {
             failed_hits++;
         }
-        if (trial.miss_ray_.SlabAABB(trial.box_).has_value()) {
+        if (!std::isnan(trial.miss_ray_.SlabAABBTest(trial.box_))) {
             failed_misses++;
         }
     }
     duration =
             duration_cast<microseconds>(high_resolution_clock::now() - start);
-    std::cout << " * class-stripped took " << static_cast<double>(duration.count()) / 1000. << " ms\n";
+    std::cout << " * class-no-optional took " << static_cast<double>(duration.count()) / 1000. << " ms\n";
     std::cout << " * " << failed_hits << " failed hits\n";
     std::cout << " * " << failed_misses << " failed misses\n";
 }
