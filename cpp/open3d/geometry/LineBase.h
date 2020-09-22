@@ -26,9 +26,9 @@
 
 #pragma once
 
-#include <limits>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <limits>
 
 #include "open3d/geometry/BoundingVolume.h"
 #include "open3d/geometry/Geometry.h"
@@ -63,24 +63,26 @@ public:
     const Eigen::Vector3d& Origin() const { return m_origin; }
     const Eigen::Vector3d& Direction() const { return m_direction; }
 
-    virtual utility::optional<double> SlabAABB(const AxisAlignedBoundingBox& box) const;
-    double SlabAABBTest(const AxisAlignedBoundingBox& box) const;
-    utility::optional<double> ExactAABB(const AxisAlignedBoundingBox& box) const;
+    virtual utility::optional<double> SlabAABB(
+            const AxisAlignedBoundingBox& box) const = 0;
 
+    virtual utility::optional<double> ExactAABB(
+            const AxisAlignedBoundingBox& box) const;
 
 protected:
     LineBase(const Eigen::Vector3d& origin,
              const Eigen::Vector3d& direction,
              LineType type);
 
-    double x_inv_;
-    double y_inv_;
-    double z_inv_;
+    std::pair<double, double> SlabAABBBase(
+            const AxisAlignedBoundingBox& box) const;
 
 private:
     const LineType line_type_ = LineType::Line;
 
-//    constexpr static const double limits_[]{std::numeric_limits<double>::min(), 0, 0};
+    double x_inv_;
+    double y_inv_;
+    double z_inv_;
 };
 
 /// \class Line3D
@@ -90,6 +92,8 @@ private:
 class Line3D : public LineBase {
 public:
     Line3D(const Eigen::Vector3d& origin, const Eigen::Vector3d& direction);
+    utility::optional<double> SlabAABB(
+            const AxisAlignedBoundingBox& box) const override;
 };
 
 /// \class Ray3D
@@ -100,7 +104,8 @@ public:
 class Ray3D : public LineBase {
 public:
     Ray3D(const Eigen::Vector3d& origin, const Eigen::Vector3d& direction);
-    utility::optional<double> SlabAABB(const AxisAlignedBoundingBox& box) const override;
+    utility::optional<double> SlabAABB(
+            const AxisAlignedBoundingBox& box) const override;
 };
 
 /// \class Segment3D
@@ -125,6 +130,11 @@ public:
     double GetLength() const { return length_; }
     const Eigen::Vector3d& EndPoint() const { return end_point_; }
 
+    utility::optional<double> SlabAABB(
+            const AxisAlignedBoundingBox& box) const override;
+
+    utility::optional<double> ExactAABB(
+            const AxisAlignedBoundingBox& box) const override;
 private:
     Eigen::Vector3d end_point_;
     double length_;
