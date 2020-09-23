@@ -51,7 +51,7 @@ public:
     /// \brief Tests if a line/ray/segment intersects with a triangle that
     /// consists of three vertices. Use for quick, one-off tests, for multiple
     /// tests against a triangle or set of triangles, or to recover the point of
-    /// intersection, use the TriangleIntersectionData class.
+    /// intersection, use the TriangleBounds class.
     ///
     /// \param line The parameterized line to test against the triangle. If the
     /// test is a ray test or a segment test, the origin is important. If the

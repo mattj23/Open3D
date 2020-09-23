@@ -24,14 +24,14 @@
 // IN THE SOFTWARE.
 // ----------------------------------------------------------------------------
 
-#include "TriangleIntersectionData.h"
+#include "TriangleBounds.h"
 
 namespace open3d {
 namespace geometry {
 
-TriangleIntersectionData::TriangleIntersectionData(const Eigen::Vector3d& v0,
-                                                   const Eigen::Vector3d& v1,
-                                                   const Eigen::Vector3d& v2) {
+TriangleBounds::TriangleBounds(const Eigen::Vector3d& v0,
+                               const Eigen::Vector3d& v1,
+                               const Eigen::Vector3d& v2) {
     v0_ = v0;
     u_ = v1 - v0;
     v_ = v2 - v0;
@@ -51,40 +51,55 @@ TriangleIntersectionData::TriangleIntersectionData(const Eigen::Vector3d& v0,
     d_ = uv_ * uv_ - uu_ * vv_;
 }
 
-std::pair<bool, Eigen::Vector3d> TriangleIntersectionData::Intersect(
-        const Eigen::ParametrizedLine<double, 3>& line,
-        const bool is_ray,
-        const bool is_segment) {
-    if (is_degenerate_) return {false, {}};
+bool TriangleBounds::IsPointInTriangle(const Eigen::Vector3d& point) const {
+    /* Based on the latter part of the algorithm in
+     * http://geomalgorithms.com/a06-_intersect-2.html#intersect3D_RayTriangle()
+     * this method takes a point and checks whether or not it lies within the
+     * bounds of the triangle.
+     */
+    if (is_degenerate_) return false;
 
-    // Check if line is parallel to the triangle
-    if (fabs(n_.dot(line.direction())) < 1e-10) return {false, {}};
-
-    auto i_scalar = line.intersectionParameter(plane_);
-
-    // If the intersection is behind the ray origin we can ignore it
-    if ((is_ray || is_segment) && i_scalar < 0) return {false, {}};
-
-    // if we are considering the line to be a segment between two points, we
-    // also want to check if the intersection lies beyond the second point, in
-    // which case we can also ignore it
-    if (is_segment && i_scalar > 1) return {false, {}};
-
-    // Is the intersection point inside the triangle?
-    Eigen::Vector3d i_point = line.pointAt(i_scalar);
-    Eigen::Vector3d w = i_point - v0_;
+    Eigen::Vector3d w = point - v0_;
     double wu = w.dot(u_);
     double wv = w.dot(v_);
 
     double s = (uv_ * wv - vv_ * wu) / d_;
-    if (s < 0.0 || s > 1.0) return {false, {}};
-    double t = (uv_ * wu - uu_ * wv) / d_;
-    if (t < 0.0 || (s + t) > 1.0) return {false, {}};
+    if (s < 0.0 || s > 1.0) return false;
 
-    return {true, i_point};
+    double t = (uv_ * wu - uu_ * wv) / d_;
+    return !(t < 0.0 || (s + t) > 1.0);
 }
 
-AxisAlignedBoundingBox TriangleIntersectionData::GetBoundingBox() const {
+utility::optional<Eigen::Vector3d> TriangleBounds::Intersection(
+        const Line3D& line) const {
+    if (is_degenerate_ || IsParallelTo(line.Direction())) {
+        return {};
+    }
+
+    auto result = line.IntersectionParameter(plane_);
+    if (!result.has_value()) return {};
+
+    auto point = line.LinePointAt(result.value());
+    if (IsPointInTriangle(point)) {
+        return point;
+    }
+    return {};
+}
+
+utility::optional<Eigen::Vector3d> TriangleBounds::Projection(
+        const Eigen::Vector3d& point) const {
+    if (is_degenerate_) {
+        return {};
+    }
+
+    auto p = plane_.projection(point);
+    if (IsPointInTriangle(p)) {
+        return p;
+    }
+    return {};
+}
+
+AxisAlignedBoundingBox TriangleBounds::GetBoundingBox() const {
     // Reconstruct the original v1 and v2 vertices
     auto v1 = v0_ + u_;
     auto v2 = v0_ + v_;
@@ -102,6 +117,11 @@ AxisAlignedBoundingBox TriangleIntersectionData::GetBoundingBox() const {
                               std::min(std::min(v0_.z(), v1.z()), v2.z())};
 
     return {min_bound, max_bound};
+}
+
+Eigen::Vector3d TriangleBounds::ClosestPoint(
+        const Eigen::Vector3d& point) const {
+    return Eigen::Vector3d();
 }
 
 }  // namespace geometry
