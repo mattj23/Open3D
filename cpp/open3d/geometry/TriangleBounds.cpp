@@ -121,7 +121,61 @@ AxisAlignedBoundingBox TriangleBounds::GetBoundingBox() const {
 
 Eigen::Vector3d TriangleBounds::ClosestPoint(
         const Eigen::Vector3d& point) const {
-    return Eigen::Vector3d();
+    /* This function is built from Christer Ericson's "Real-Time Collision
+     * Detection" implementation on page 141 and 142
+     */
+
+    using Vector = Eigen::Vector3d;
+
+    // Check if P in vertex region outside A
+    Vector ap = point - v0_;
+    double d1 = u_.dot(ap);
+    double d2 = v_.dot(ap);
+    if (d1 <= 0. && d2 <= 0.) return v0_;
+
+    // Check if P in vertex region outside B
+    //    Vector bp = point - v1;
+    Vector bp = ap - u_;
+    double d3 = u_.dot(bp);
+    double d4 = v_.dot(bp);
+    if (d3 >= 0. && d4 <= d3) return v0_ + u_;
+
+    // Check if P in edge region of AB, if so return projection of P onto AB
+    double vc = d1 * d4 - d3 * d2;
+    if (vc <= 0. && d1 >= 0. && d3 <= 0.) {
+        double v = d1 / (d1 - d3);
+        return v0_ + v * u_;
+    }
+
+    // Check if P in vertex region outside C
+    //    Vector cp = point - v2;
+    Vector cp = ap - v_;
+    double d5 = u_.dot(cp);
+    double d6 = v_.dot(cp);
+    if (d6 >= 0. && d5 <= d6) return v0_ + v_;
+
+    // Check if P in edge region of AC, if so return projection of P onto AC
+    double vb = d5 * d2 - d1 * d6;
+    if (vb <= 0. && d2 >= 0. && d6 <= 0.) {
+        double w = d2 / (d2 - d6);
+        return v0_ + w * v_;
+    }
+
+    // Check if P in edge region of BC, if so return projection of P onto BC
+    double va = d3 * d6 - d5 * d4;
+    if (va <= 0. && (d4 - d3) >= 0. && (d5 - d6) >= 0.) {
+        double w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        return v0_ + u_ + w * (v_ - u_);
+        //        return v1 + w * (v2 - v1); // barycentric coordinates
+        //        (0,1-w,w)
+    }
+
+    // P inside face region. Compute Q through its barycentric coordinates
+    // (u,v,w)
+    double denom = 1.0 / (va + vb + vc);
+    double v = vb * denom;
+    double w = vc * denom;
+    return v0_ + u_ * v + v_ * w;
 }
 
 }  // namespace geometry

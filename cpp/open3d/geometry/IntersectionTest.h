@@ -30,6 +30,7 @@
 
 #include "BoundingVolume.h"
 #include "Line3D.h"
+#include "TriangleBounds.h"
 
 namespace open3d {
 namespace geometry {
@@ -47,31 +48,6 @@ public:
                                    const Eigen::Vector3d& q0,
                                    const Eigen::Vector3d& q1,
                                    const Eigen::Vector3d& q2);
-
-    /// \brief Tests if a line/ray/segment intersects with a triangle that
-    /// consists of three vertices. Use for quick, one-off tests, for multiple
-    /// tests against a triangle or set of triangles, or to recover the point of
-    /// intersection, use the TriangleBounds class.
-    ///
-    /// \param line The parameterized line to test against the triangle. If the
-    /// test is a ray test or a segment test, the origin is important. If the
-    /// test is for a segment, the line origin is the segment start point and
-    /// the direction is the vector to the endpoint. Do not normalize the
-    /// segment direction, as it will then become a segment of length 1.
-    /// \param v0 The root vertex of the triangle
-    /// \param v1 The second vertex of the triangle
-    /// \param v2 The third vertex of the triangle
-    /// \param is_ray Set true to disregard intersections behind the origin
-    /// \param is_segment Set true to disregard intersections that are either
-    /// behind the origin or beyond line.origin() + line.direction(). This flag
-    /// will supersede is_ray.
-    /// \return true if the line intersects.
-    static bool LineTriangle3d(const Eigen::ParametrizedLine<double, 3>& line,
-                               const Eigen::Vector3d& v0,
-                               const Eigen::Vector3d& v1,
-                               const Eigen::Vector3d& v2,
-                               bool is_ray=false,
-                               bool is_segment=false);
 
     static bool TriangleAABB(const Eigen::Vector3d& box_center,
                              const Eigen::Vector3d& box_half_size,
@@ -105,6 +81,63 @@ public:
                                               const Eigen::Vector3d& p1,
                                               const Eigen::Vector3d& q0,
                                               const Eigen::Vector3d& q1);
+
+    /// \brief Returns the closest point on a triangle to a test point. The
+    /// closest point may be one of the three vertices, may lie on one of the
+    /// three edges, or may be on the face of the triangle itself. This feature
+    /// may also be used directly on the TriangleBounds class.
+    /// \param point The test point to check against
+    /// \param v0 The root vertex of the triangle
+    /// \param v1 The second vertex of the triangle
+    /// \param v2 The third vertex of the triangle
+    /// \return A point with the minimal distance from the test point to the
+    /// space represented by the triangle.
+    static Eigen::Vector3d ClosestPointTriangle3d(const Eigen::Vector3d& point,
+                                                  const Eigen::Vector3d& v0,
+                                                  const Eigen::Vector3d& v1,
+                                                  const Eigen::Vector3d& v2) {
+        return TriangleBounds(v0, v1, v2).ClosestPoint(point);
+    }
+
+    /// \brief Tests if a line/ray/segment intersects with a triangle that
+    /// consists of three vertices. Use for quick, one-off tests, for multiple
+    /// tests against a triangle or set of triangles use the TriangleBounds
+    /// class directly, which pre-computes values for increased speed when
+    /// checking the same triangle against multiple lines.
+    ///
+    /// \code{.cpp}
+    /// # To test a line against the triangle
+    /// auto p = IntersectionTest::LineTriangle3d(Line3D{p, n}, v0, v1, v2);
+    /// if (p.has_value()) {
+    ///     ... // do something with p.value()
+    /// }
+    ///
+    /// # To test a ray against the triangle
+    /// auto p = IntersectionTest::LineTriangle3d(Ray3D{p, n}, v0, v1, v2);
+    /// if (p.has_value()) {
+    ///     ... // do something with p.value()
+    /// }
+    ///
+    /// # To test a segment against the triangle
+    /// auto p = IntersectionTest::LineTriangle3d(Segment3D{p, e}, v0, v1, v2);
+    /// if (p.has_value()) {
+    ///     ... // do something with p.value()
+    /// }
+    /// \endcode
+    ///
+    /// \param line The Line3D, Ray3D, or Segment3D to perform the test against
+    /// \param v0 The root vertex of the triangle
+    /// \param v1 The second vertex of the triangle
+    /// \param v2 The third vertex of the triangle
+    /// \return an empty value if there is no intersection, or the point of
+    /// intersection if there is
+    static utility::optional<Eigen::Vector3d> LineTriangle3d(
+            const Line3D& line,
+            const Eigen::Vector3d& v0,
+            const Eigen::Vector3d& v1,
+            const Eigen::Vector3d& v2) {
+        return TriangleBounds(v0, v1, v2).Intersection(line);
+    }
 
     /// \brief Returns the lower intersection parameter for a line with an
     /// axis aligned bounding box or empty if no intersection. This method is

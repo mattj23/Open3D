@@ -44,6 +44,9 @@ using intr_t = std::tuple<v_t, v_t, v_t>;
 // Line/Ray/Segment test parameter container
 using lrs_t = std::tuple<lt_t, v_t, v_t, bool>;
 
+// Closest point tests
+using cp_t = std::tuple<v_t, v_t>;
+
 // Factory function to build appropriate type from enum
 inline std::shared_ptr<Line3D> LineFactory(lt_t type,
                                            const v_t& v0,
@@ -105,6 +108,54 @@ INSTANTIATE_TEST_CASE_P(
                box_t{{0, 0, 0}, {0, 0, 1}, {-2, 2, 1}, {-2, 0, 0}, {0, 2, 1}},
                box_t{{0, 0, 0}, {0, 0, 1}, {1, -2, 2}, {0, -2, 0}, {1, 0, 2}},
                box_t{{0, 0, 0}, {0, 0, 1}, {2, 1, -2}, {0, 0, -2}, {2, 1, 1}}));
+
+// ClosestPoint tests
+// ===========================================================================
+class ClosestPointTests : public TestWithParam<cp_t> {
+protected:
+    geometry::TriangleBounds triangle{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}};
+};
+
+TEST_P(ClosestPointTests, CorrectPoints) {
+    const auto& test = std::get<0>(GetParam());
+    const auto& expected = std::get<1>(GetParam());
+
+    auto result = triangle.ClosestPoint(test);
+
+    EXPECT_LT((expected - result).norm(), 0.0001);
+}
+
+INSTANTIATE_TEST_CASE_P(ClosestPoint,
+                        ClosestPointTests,
+                        Values(
+                                // Points on the face
+                                cp_t{{.1, .1, 1}, {.1, .1, 0}},
+                                cp_t{{.5, .3, -1}, {.5, .3, 0}},
+                                cp_t{{.1, .7, 1}, {.1, .7, 0}},
+
+                                // Points on edge v0 -> v1
+                                cp_t{{0.7, -.3, -.5}, {0.7, 0, 0}},
+                                cp_t{{0.3, -.1, .5}, {0.3, 0, 0}},
+
+                                // Points on edge v1 -> v2
+                                cp_t{{-.7, .3, -.5}, {0, .3, 0}},
+                                cp_t{{-.3, .8, .5}, {0, 0.8, 0}},
+
+                                // Points on edge v0 -> v2
+                                cp_t{{.8, .4, -.1}, {.7, .3, 0}},
+                                cp_t{{1, 1, .5}, {.5, .5, 0}},
+
+                                // Points in vertex region around v0
+                                cp_t{{2., -.1, 1}, {1, 0, 0}},
+                                cp_t{{1.5, .2, -.5}, {1, 0, 0}},
+
+                                // Points in vertex region around v1
+                                cp_t{{-.1, -1, 1}, {0, 0, 0}},
+                                cp_t{{-.2, -.1, -1}, {0, 0, 0}},
+
+                                // Points in vertex region around v2
+                                cp_t{{.1, 1.5, 1}, {0, 1, 0}},
+                                cp_t{{-.2, 1.1, -1}, {0, 1, 0}}));
 
 // Intersection tests
 // ===========================================================================
