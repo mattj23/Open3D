@@ -25,12 +25,15 @@
 // ----------------------------------------------------------------------------
 
 #include <open3d/geometry/BoundingVolume.h>
-#include <open3d/geometry/TriangleIntersectionData.h>
+#include <open3d/geometry/TriangleBounds.h>
 
+#include "open3d/utility/Optional.h"
 #include "tests/UnitTest.h"
 
 using namespace ::testing;
+using namespace open3d::geometry;
 using v_t = Eigen::Vector3d;
+using lt_t = Line3D::LineType;
 
 // Bounding box test parameter container
 using box_t = std::tuple<v_t, v_t, v_t, v_t, v_t>;
@@ -39,7 +42,22 @@ using box_t = std::tuple<v_t, v_t, v_t, v_t, v_t>;
 using intr_t = std::tuple<v_t, v_t, v_t>;
 
 // Line/Ray/Segment test parameter container
-using lrs_t = std::tuple<v_t, v_t, int, bool>;
+using lrs_t = std::tuple<lt_t, v_t, v_t, bool>;
+
+// Factory function to build appropriate type from enum
+inline std::shared_ptr<Line3D> LineFactory(lt_t type,
+                                           const v_t& v0,
+                                           const v_t& v1) {
+    if (type == lt_t::Line) {
+        return std::make_shared<Line3D>(v0, v1);
+    } else if (type == lt_t::Ray) {
+        return std::make_shared<Ray3D>(v0, v1);
+    } else if (type == lt_t::Segment) {
+        return std::make_shared<Segment3D>(v0, v1);
+    } else {
+        throw std::exception();
+    }
+}
 
 namespace open3d {
 namespace tests {
@@ -55,7 +73,7 @@ TEST_P(TriangleBoundingBoxTests, CheckBoundingBoxes) {
     const auto& min = std::get<3>(GetParam());
     const auto& max = std::get<4>(GetParam());
 
-    geometry::TriangleIntersectionData t{v0, v1, v2};
+    geometry::TriangleBounds t{v0, v1, v2};
     auto box = t.GetBoundingBox();
 
     ExpectEQ(min, box.min_bound_);
@@ -92,8 +110,7 @@ INSTANTIATE_TEST_CASE_P(
 // ===========================================================================
 class SimpleTriangleTest : public TestWithParam<intr_t> {
 protected:
-    geometry::TriangleIntersectionData triangle{
-            {1, 0, 0}, {0, 0, 0}, {0, 1, 0}};
+    geometry::TriangleBounds triangle{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}};
 };
 
 TEST_P(SimpleTriangleTest, Intersections) {
@@ -101,13 +118,11 @@ TEST_P(SimpleTriangleTest, Intersections) {
     const auto& line_direction = std::get<1>(GetParam());
     const auto& expected = std::get<2>(GetParam());
 
-    Eigen::ParametrizedLine<double, 3> line{line_origin, line_direction};
+    Line3D line{line_origin, line_direction};
+    auto result = triangle.Intersection(line);
 
-    auto result = triangle.Intersect(line, false, false);
-    v_t point = result.second;
-
-    EXPECT_TRUE(result.first);
-    ExpectEQ(expected, point);
+    EXPECT_TRUE(result.has_value());
+    ExpectEQ(expected, result.value());
 }
 
 /* The following tests check intersections with a simple triangle that goes from
@@ -158,23 +173,19 @@ INSTANTIATE_TEST_CASE_P(
 // ===========================================================================
 class LineRaySegmentTests : public TestWithParam<lrs_t> {
 protected:
-    geometry::TriangleIntersectionData triangle{
-            {1, 0, 0}, {0, 0, 0}, {0, 1, 0}};
+    geometry::TriangleBounds triangle{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}};
 };
 
 TEST_P(LineRaySegmentTests, HitsAndMisses) {
-    const auto& line_origin = std::get<0>(GetParam());
-    const auto& line_direction = std::get<1>(GetParam());
-    int line_type = std::get<2>(GetParam());
+    auto line_type = std::get<0>(GetParam());
+    const auto& line_origin = std::get<1>(GetParam());
+    const auto& line_direction = std::get<2>(GetParam());
     bool hit = std::get<3>(GetParam());
 
-    Eigen::ParametrizedLine<double, 3> line{line_origin, line_direction};
+    auto line = LineFactory(line_type, line_origin, line_direction);
+    auto result = triangle.Intersection(*line);
 
-    bool is_ray = line_type == 1;
-    bool is_seg = line_type == 2;
-
-    auto result = triangle.Intersect(line, is_ray, is_seg);
-    EXPECT_EQ(hit, result.first);
+    EXPECT_EQ(hit, result.has_value());
 }
 
 /* These tests validate the correctness of the the line/segment/ray handling by
@@ -191,67 +202,67 @@ INSTANTIATE_TEST_CASE_P(
         LineRaySegmentTests,
         Values(
                 // Lines that should hit
-                lrs_t{{1.7, 1.8, 2.0}, {0.5, 0.8, 1.0}, 0, true},
-                lrs_t{{-0.4, -0.8, -2.0}, {-0.4, -0.5, -1.0}, 0, true},
-                lrs_t{{0.2, 2.4, -2.0}, {0.1, 1.0, -1.0}, 0, true},
-                lrs_t{{2.0, -1.4, -2.0}, {0.9, -0.9, -1.0}, 0, true},
-                lrs_t{{-0.4, 1.1, 2.0}, {0.4, -0.3, -1.0}, 0, true},
+                lrs_t{lt_t::Line, {1.7, 1.8, 2.0}, {0.5, 0.8, 1.0}, true},
+                lrs_t{lt_t::Line, {-0.4, -0.8, -2.0}, {-0.4, -0.5, -1.0}, true},
+                lrs_t{lt_t::Line, {0.2, 2.4, -2.0}, {0.1, 1.0, -1.0}, true},
+                lrs_t{lt_t::Line, {2.0, -1.4, -2.0}, {0.9, -0.9, -1.0}, true},
+                lrs_t{lt_t::Line, {-0.4, 1.1, 2.0}, {0.4, -0.3, -1.0}, true},
 
                 // Lines that should miss
-                lrs_t{{2.4, -1.6, 2.0}, {-0.8, 1.0, -1.0}, 0, false},
-                lrs_t{{-0.2, 0.8, -2.0}, {0.6, -0.1, 1.0}, 0, false},
-                lrs_t{{2.2, -0.7, -2.0}, {-0.8, 0.8, 1.0}, 0, false},
-                lrs_t{{1.0, 2.8, -2.0}, {-0.2, -1.0, 1.0}, 0, false},
-                lrs_t{{1.9, 1.6, 2.0}, {-0.6, -0.3, -1.0}, 0, false},
+                lrs_t{lt_t::Line, {2.4, -1.6, 2.0}, {-0.8, 1.0, -1.0}, false},
+                lrs_t{lt_t::Line, {-0.2, 0.8, -2.0}, {0.6, -0.1, 1.0}, false},
+                lrs_t{lt_t::Line, {2.2, -0.7, -2.0}, {-0.8, 0.8, 1.0}, false},
+                lrs_t{lt_t::Line, {1.0, 2.8, -2.0}, {-0.2, -1.0, 1.0}, false},
+                lrs_t{lt_t::Line, {1.9, 1.6, 2.0}, {-0.6, -0.3, -1.0}, false},
 
                 // Rays that should hit
-                lrs_t{{-0.4, 2.1, 2.0}, {0.3, -0.7, -1.0}, 1, true},
-                lrs_t{{-0.2, 0.7, -2.0}, {0.1, -0.2, 1.0}, 1, true},
-                lrs_t{{0.1, 2.2, 2.0}, {0.2, -0.9, -1.0}, 1, true},
-                lrs_t{{2.2, -0.7, -2.0}, {-1.0, 0.5, 1.0}, 1, true},
-                lrs_t{{0.0, 2.2, 2.0}, {0.0, -1.0, -1.0}, 1, true},
+                lrs_t{lt_t::Ray, {-0.4, 2.1, 2.0}, {0.3, -0.7, -1.0}, true},
+                lrs_t{lt_t::Ray, {-0.2, 0.7, -2.0}, {0.1, -0.2, 1.0}, true},
+                lrs_t{lt_t::Ray, {0.1, 2.2, 2.0}, {0.2, -0.9, -1.0}, true},
+                lrs_t{lt_t::Ray, {2.2, -0.7, -2.0}, {-1.0, 0.5, 1.0}, true},
+                lrs_t{lt_t::Ray, {0.0, 2.2, 2.0}, {0.0, -1.0, -1.0}, true},
 
                 // Rays that would hit but are facing the wrong way
-                lrs_t{{-1.3, 2.4, 2.0}, {-0.7, 1.0, 1.0}, 1, false},
-                lrs_t{{-0.1, 2.3, -2.0}, {-0.1, 0.8, -1.0}, 1, false},
-                lrs_t{{2.2, -0.2, -2.0}, {0.9, -0.2, -1.0}, 1, false},
-                lrs_t{{-0.9, 1.0, 2.0}, {-0.7, 0.3, 1.0}, 1, false},
-                lrs_t{{-1.2, -1.6, 2.0}, {-1.0, -0.8, 1.0}, 1, false},
+                lrs_t{lt_t::Ray, {-1.3, 2.4, 2.0}, {-0.7, 1.0, 1.0}, false},
+                lrs_t{lt_t::Ray, {-0.1, 2.3, -2.0}, {-0.1, 0.8, -1.0}, false},
+                lrs_t{lt_t::Ray, {2.2, -0.2, -2.0}, {0.9, -0.2, -1.0}, false},
+                lrs_t{lt_t::Ray, {-0.9, 1.0, 2.0}, {-0.7, 0.3, 1.0}, false},
+                lrs_t{lt_t::Ray, {-1.2, -1.6, 2.0}, {-1.0, -0.8, 1.0}, false},
 
                 // Rays that should miss completely
-                lrs_t{{0.0, -1.1, 2.0}, {0.1, 1.0, -1.0}, 1, false},
-                lrs_t{{-0.4, 2.8, 2.0}, {0.4, -1.0, -1.0}, 1, false},
-                lrs_t{{1.9, -0.1, -2.0}, {-0.5, 0.5, 1.0}, 1, false},
-                lrs_t{{-0.3, -0.9, -2.0}, {0.5, 0.8, 1.0}, 1, false},
-                lrs_t{{-1.1, 2.0, -2.0}, {1.0, -0.5, 1.0}, 1, false},
+                lrs_t{lt_t::Ray, {0.0, -1.1, 2.0}, {0.1, 1.0, -1.0}, false},
+                lrs_t{lt_t::Ray, {-0.4, 2.8, 2.0}, {0.4, -1.0, -1.0}, false},
+                lrs_t{lt_t::Ray, {1.9, -0.1, -2.0}, {-0.5, 0.5, 1.0}, false},
+                lrs_t{lt_t::Ray, {-0.3, -0.9, -2.0}, {0.5, 0.8, 1.0}, false},
+                lrs_t{lt_t::Ray, {-1.1, 2.0, -2.0}, {1.0, -0.5, 1.0}, false},
 
                 // Segments starting on the triangle
-                lrs_t{{0.0, 0.8, 0.0}, {-0.6, 0.7, -1.0}, 2, true},
-                lrs_t{{0.0, 0.2, 0.0}, {0.2, 0.8, 1.0}, 2, true},
-                lrs_t{{0.2, 0.5, 0.0}, {1.0, 1.0, 1.0}, 2, true},
-                lrs_t{{0.4, 0.3, 0.0}, {-1.0, 0.9, 1.0}, 2, true},
-                lrs_t{{0.0, 0.1, 0.0}, {0.4, 0.5, 1.0}, 2, true},
+                lrs_t{lt_t::Segment, {0.0, 0.8, 0.0}, {-0.6, 0.7, -1.0}, true},
+                lrs_t{lt_t::Segment, {0.0, 0.2, 0.0}, {0.2, 0.8, 1.0}, true},
+                lrs_t{lt_t::Segment, {0.2, 0.5, 0.0}, {1.0, 1.0, 1.0}, true},
+                lrs_t{lt_t::Segment, {0.4, 0.3, 0.0}, {-1.0, 0.9, 1.0}, true},
+                lrs_t{lt_t::Segment, {0.0, 0.1, 0.0}, {0.4, 0.5, 1.0}, true},
 
                 // Segments ending on the triangle
-                lrs_t{{0.8, 0.9, 1.0}, {-0.6, -0.8, -1.0}, 2, true},
-                lrs_t{{1.0, 0.1, 1.0}, {-0.6, 0.4, -1.0}, 2, true},
-                lrs_t{{0.3, -0.7, -1.0}, {-0.1, 0.8, 1.0}, 2, true},
-                lrs_t{{0.3, 0.1, -1.0}, {0.3, 0.2, 1.0}, 2, true},
-                lrs_t{{0.6, 0.9, -1.0}, {-0.1, -0.8, 1.0}, 2, true},
+                lrs_t{lt_t::Segment, {0.8, 0.9, 1.0}, {-0.6, -0.8, -1.0}, true},
+                lrs_t{lt_t::Segment, {1.0, 0.1, 1.0}, {-0.6, 0.4, -1.0}, true},
+                lrs_t{lt_t::Segment, {0.3, -0.7, -1.0}, {-0.1, 0.8, 1.0}, true},
+                lrs_t{lt_t::Segment, {0.3, 0.1, -1.0}, {0.3, 0.2, 1.0}, true},
+                lrs_t{lt_t::Segment, {0.6, 0.9, -1.0}, {-0.1, -0.8, 1.0}, true},
 
                 // Segments passing through the triangle
-                lrs_t{{-0.4, 0.6, -1.0}, {1.4, 0.0, 2.0}, 2, true},
-                lrs_t{{0.6, 0.0, 1.0}, {-1.2, 0.4, -2.0}, 2, true},
-                lrs_t{{0.9, 0.3, 1.0}, {-1.6, -0.2, -2.0}, 2, true},
-                lrs_t{{0.1, -0.3, -1.0}, {-0.2, 2.0, 2.0}, 2, true},
-                lrs_t{{0.9, 0.4, -1.0}, {-0.6, -0.6, 2.0}, 2, true},
+                lrs_t{lt_t::Segment, {-0.4, 0.6, -1.0}, {1.4, 0.0, 2.0}, true},
+                lrs_t{lt_t::Segment, {0.6, 0.0, 1.0}, {-1.2, 0.4, -2.0}, true},
+                lrs_t{lt_t::Segment, {0.9, 0.3, 1.0}, {-1.6, -0.2, -2.0}, true},
+                lrs_t{lt_t::Segment, {0.1, -0.3, -1.0}, {-0.2, 2.0, 2.0}, true},
+                lrs_t{lt_t::Segment, {0.9, 0.4, -1.0}, {-0.6, -0.6, 2.0}, true},
 
                 // Segments too short to reach the triangle
-                lrs_t{{0.3, 0.3, -2.0}, {0.0, 0.1, 1.0}, 2, false},
-                lrs_t{{0.8, 1.2, 2.0}, {-0.3, -0.5, -1.0}, 2, false},
-                lrs_t{{-1.9, -1.1, 2.0}, {1.0, 0.8, -1.0}, 2, false},
-                lrs_t{{2.5, -0.9, 2.0}, {-1.0, 0.6, -1.0}, 2, false},
-                lrs_t{{2.2, 1.9, -2.0}, {-1.0, -0.9, 1.0}, 2, false}));
+                lrs_t{lt_t::Segment, {0.3, 0.3, -2.0}, {0.0, 0.1, -1.0}, false},
+                lrs_t{lt_t::Segment, {0.8, 1.2, 2.0}, {-0.3, -0.5, .5}, false},
+                lrs_t{lt_t::Segment, {-1.9, -1.1, 2.0}, {1.0, 0.8, .1}, false},
+                lrs_t{lt_t::Segment, {2.5, -0.9, 2.0}, {-1.0, 0.6, 1.0}, false},
+                lrs_t{lt_t::Segment, {2.2, 1.9, -2.}, {-1., -.9, -.1}, false}));
 
 }  // namespace tests
 }  // namespace open3d
