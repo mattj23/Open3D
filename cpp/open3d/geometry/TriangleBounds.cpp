@@ -79,7 +79,7 @@ utility::optional<Eigen::Vector3d> TriangleBounds::Intersection(
     auto result = line.IntersectionParameter(plane_);
     if (!result.has_value()) return {};
 
-    auto point = line.LinePointAt(result.value());
+    auto point = line.Line().pointAt(result.value());
     if (IsPointInTriangle(point)) {
         return point;
     }

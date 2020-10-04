@@ -111,12 +111,12 @@ INSTANTIATE_TEST_CASE_P(
 
 // ClosestPoint tests
 // ===========================================================================
-class ClosestPointTests : public TestWithParam<cp_t> {
+class TriangleClosestPointTests : public TestWithParam<cp_t> {
 protected:
     geometry::TriangleBounds triangle{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}};
 };
 
-TEST_P(ClosestPointTests, CorrectPoints) {
+TEST_P(TriangleClosestPointTests, CorrectPoints) {
     const auto& test = std::get<0>(GetParam());
     const auto& expected = std::get<1>(GetParam());
 
@@ -126,7 +126,7 @@ TEST_P(ClosestPointTests, CorrectPoints) {
 }
 
 INSTANTIATE_TEST_CASE_P(ClosestPoint,
-                        ClosestPointTests,
+                        TriangleClosestPointTests,
                         Values(
                                 // Points on the face
                                 cp_t{{.1, .1, 1}, {.1, .1, 0}},
