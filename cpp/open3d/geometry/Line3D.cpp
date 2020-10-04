@@ -139,11 +139,8 @@ utility::optional<double> Line3D::SlabAABB(
     return {};
 }
 
-utility::optional<double> Line3D::LineIntersectionParameter(
+utility::optional<double> Line3D::IntersectionParameter(
         const Eigen::Hyperplane<double, 3>& plane) const {
-    // Eigen's underlying intersectionParameter contains a dot product in the
-    // denominator, so a case where the line is parallel to the plane will
-    // result in either a positive or negative infinity.
     double value = intersectionParameter(plane);
     if (std::isinf(value)) {
         return {};
@@ -153,11 +150,118 @@ utility::optional<double> Line3D::LineIntersectionParameter(
 }
 
 Eigen::Vector3d Line3D::Projection(const Eigen::Vector3d& point) const {
-    return projection(point);
+    return Line().pointAt(ProjectionParameter(point));
 }
 
 double Line3D::ProjectionParameter(const Eigen::Vector3d& point) const {
-    return direction().dot(point - origin());
+    return ClampParameter(direction().dot(point - origin()));
+}
+
+std::pair<double, double> Line3D::ClosestParameters(const Line3D& other) const {
+    /* The book "Real-Time Collision Detection" by Christer Ericson discusses
+     * in section 5.1.9 (p148) finding the closest point between two line
+     * segments.
+     *
+     *   * The line-line solution is valid for segments when the parameters it
+     *     produces are valid on both segments
+     *
+     *   * If just one of the closest points between lines is outside of its
+     *     segment, the point can be clamped to the segment and the result will
+     *     be valid
+     *
+     *   * If both points are outside of their respective segments, the clamping
+     *     procedure ust be repeated twice. First, one of the points is clamped
+     *     to its segment. Then it is projected onto the second segment, which
+     *     may return an out-of-bound value as well. If it does, it must be
+     *     clamped to its (the second) segment, then projected back onto the
+     *     first segment. At that point the projection should be valid, and the
+     *     closest distance is spanned by the two final parameters.
+     *
+     * Lines and rays in this case can be seen as a special case of a segment
+     * in which the validity of parameters are unbounded in one or more
+     * directions. Thus the same algorithm will account for lines and rays as
+     * well as segments.
+     *
+     * The last edge case is the case of parallel lines. In such a case an
+     * arbitrary parameter on one or the other line may be selected and the
+     * corresponding parameter on the other line computed. However, in the non-
+     * infinite case of rays and segments, this will not necessarily return a
+     * valid result.
+     *
+     * As such, the project/clamp + project/clamp procedure will work starting
+     * from this arbitrary point.
+     */
+
+    // This first portion of the code performs the general computation of
+    // line parameters at the closest span between two infinite parameterized
+    // lines, and is adapted from the implementation found at
+    // http://geomalgorithms.com/a07-_distance.html
+    const auto& u = Direction();
+    const auto& v = other.Direction();
+    auto w = Origin() - other.Origin();
+    double a = u.dot(u);
+    double b = u.dot(v);
+    double c = v.dot(v);
+    double d = u.dot(w);
+    double e = v.dot(w);
+    double D = a * c - b * b;
+
+    double sc, tc;
+    if (D < 1e-10) {
+        // In the case of almost parallel lines, we arbitrarily pick the first
+        // parameter to be 0 and then compute the other line's corresponding
+        // parameter.
+        sc = 0.;
+        tc = b > c ? d / b : e / c;
+    } else {
+        sc = (b * e - c * d) / D;
+        tc = (a * e - b * d) / D;
+    }
+
+    // At this point, sc is the parameter of the closest point on *this line's
+    // infinite representation and tc is the corresponding point on the other
+    // line's infinite representation. If they are both valid, they can be
+    // returned as-is, if not a clamp/project round-trip must be executed
+    if (IsParameterValid(sc) && other.IsParameterValid(tc)) {
+        return {sc, tc};
+    }
+
+    /* To avoid an edge case when two segments are parallel and disjoint and
+     * the origin of the first segment is further from `other` than its
+     * endpoint, we cannot take advantage of a single valid parameter. Instead
+     * we must clamp, project to the other line, clamp, and project back to
+     * this line.
+     *
+     * The .Project() method on Ray3D and Segment3D takes care of clamping, so
+     * it's a straightforward procedure.
+     */
+
+    // Clamp sc to this line, then find tc by projecting onto the other line.
+    sc = ClampParameter(sc);
+    tc = other.ProjectionParameter(Line().pointAt(sc));
+
+    // tc will already be clamped to other, so now we recompute sc
+    sc = ProjectionParameter(other.Line().pointAt(tc));
+
+    return {sc, tc};
+}
+
+std::pair<Eigen::Vector3d, Eigen::Vector3d> Line3D::ClosestPoints(
+        const Line3D& other) const {
+    /* The two closest points between two line entities is easily found by
+     * using the ClosestParameters method and rendering the parameters into
+     * points. */
+    auto result = ClosestParameters(other);
+    return {Line().pointAt(std::get<0>(result)),
+            other.Line().pointAt(std::get<1>(result))};
+}
+
+double Line3D::DistanceTo(const Line3D& other) const {
+    /* The distance between two line entities is the distance between the
+     * closest points */
+    auto pair = ClosestPoints(other);
+
+    return (std::get<0>(pair) - std::get<1>(pair)).norm();
 }
 
 // Ray3D Implementations
@@ -191,22 +295,11 @@ utility::optional<double> Ray3D::IntersectionParameter(
         const Eigen::Hyperplane<double, 3>& plane) const {
     // On a ray, the intersection parameter cannot be negative as the ray does
     // not exist in that direction.
-    auto result = LineIntersectionParameter(plane);
-    if (result.has_value() && result.value() >= 0) {
+    auto result = Line().intersectionParameter(plane);
+    if (!std::isinf(result) && result >= 0) {
         return result;
     }
     return {};
-}
-
-double Ray3D::ProjectionParameter(const Eigen::Vector3d& point) const {
-    // On a ray, the projection parameter cannot be negative, so if the
-    // projection does lie on the negative side of the line it is moved to
-    // the origin.
-    return std::max(0., Line3D::ProjectionParameter(point));
-}
-
-Eigen::Vector3d Ray3D::Projection(const Eigen::Vector3d& point) const {
-    return pointAt(ProjectionParameter(point));
 }
 
 // Segment3D Implementations
@@ -219,6 +312,9 @@ Segment3D::Segment3D(const Eigen::Vector3d& start_point,
              LineType::Segment),
       end_point_(end_point),
       length_((start_point - end_point_).norm()) {}
+
+Segment3D::Segment3D(const std::pair<Eigen::Vector3d, Eigen::Vector3d>& pair)
+    : Segment3D(std::get<0>(pair), std::get<1>(pair)) {}
 
 utility::optional<double> Segment3D::SlabAABB(
         const AxisAlignedBoundingBox& box) const {
@@ -268,22 +364,11 @@ utility::optional<double> Segment3D::IntersectionParameter(
         const Eigen::Hyperplane<double, 3>& plane) const {
     // On a segment, the intersection parameter must be between zero and the
     // length of the segment
-    auto result = LineIntersectionParameter(plane);
-    if (result.has_value() && result.value() >= 0 &&
-        result.value() <= length_) {
+    auto result = Line().intersectionParameter(plane);
+    if (!std::isinf(result) && result >= 0 && result <= length_) {
         return result;
     }
     return {};
-}
-double Segment3D::ProjectionParameter(const Eigen::Vector3d& point) const {
-    // On a segment, the projection parameter cannot be less than zero or
-    // greater than the segment length, so any parameter that lies beyond those
-    // limits is capped by them.
-    return std::min(std::max(0., Line3D::ProjectionParameter(point)), length_);
-}
-
-Eigen::Vector3d Segment3D::Projection(const Eigen::Vector3d& point) const {
-    return pointAt(ProjectionParameter(point));
 }
 
 }  // namespace geometry
