@@ -39,6 +39,7 @@ set(UNIT_TEST_SOURCE_FILES
     geometry/IntersectionTest.cpp
     geometry/EstimateNormals.cpp
     geometry/Line3D.cpp
+    geometry/TriangleBounds.cpp
     geometry/Octree.cpp
     geometry/HalfEdgeTriangleMesh.cpp
     geometry/AccumulatedPoint.cpp

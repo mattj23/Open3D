@@ -26,6 +26,7 @@ set(ALL_SOURCE_FILES
     SurfaceReconstructionPoisson.cpp
     TetraMesh.cpp
     TetraMeshFactory.cpp
+    TriangleBounds.cpp
     TriangleMesh.cpp
     TriangleMeshDeformation.cpp
     TriangleMeshFactory.cpp
