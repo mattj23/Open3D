@@ -1,5 +1,6 @@
 # build
 set(ALL_SOURCE_FILES
+    Bvh.cpp
     BoundingVolume.cpp
     EstimateNormals.cpp
     Geometry3D.cpp
