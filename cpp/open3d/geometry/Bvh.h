@@ -46,22 +46,17 @@ template <class T>
 class BvhNode {
 public:
     const AxisAlignedBoundingBox& Box() const { return box_; }
-    void SetBox(const AxisAlignedBoundingBox& box);
+    void SetBox(const AxisAlignedBoundingBox& box) {
+            box_ = box;
+    };
 
-    std::unique_ptr<BvhNode<T>> left;
-    std::unique_ptr<BvhNode<T>> right;
-
-    const std::vector<size_t>& Primitives() const { return primitive_indices_; }
+    std::unique_ptr<BvhNode<T>> left_;
+    std::unique_ptr<BvhNode<T>> right_;
+    std::vector<size_t> indices_;
 
 private:
     AxisAlignedBoundingBox box_;
-    std::vector<size_t> primitive_indices_;
 };
-
-template <class T>
-void BvhNode<T>::SetBox(const AxisAlignedBoundingBox& box) {
-    box_ = box;
-}
 
 
 /// \class Bvh
@@ -97,21 +92,23 @@ template <class T>
 std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(BoxFn to_box,
                                               Container primitives) {
     // Prepare the vector of indices and the vector of bounding boxes
-    std::vector<size_t> indices;
     std::vector<AxisAlignedBoundingBox> boxes;
 
-    indices.reserve(primitives->size());
+    auto bvh = std::make_unique<Bvh<T>>(to_box, primitives);
+    bvh->root_ = std::make_unique<Node>();
+    bvh->root_->indices_.reserve(primitives->size());
     boxes.reserve(primitives->size());
 
     for (size_t i = 0; i < primitives->size(); ++i) {
-        indices.push_back(i);
+        bvh->root_->indices_.push_back(i);
         boxes.push_back(to_box((*primitives)[i]));
     }
 
-    auto ptr = std::make_unique<Bvh<T>>(to_box, primitives);
-    ptr->root_ = std::make_unique<BvhNode<T>>();
+    for (auto i : bvh->root_->indices_) {
+        printf("%lu\n", i);
+    }
 
-    return ptr;
+    return bvh;
 }
 
 }  // namespace geometry
