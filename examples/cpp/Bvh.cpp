@@ -1,4 +1,5 @@
-// --------------------------------------------------------EXAMPLE_CPP(LineSet                   ${CMAKE_PROJECT_NAME})--------------------
+// --------------------------------------------------------EXAMPLE_CPP(LineSet
+// ${CMAKE_PROJECT_NAME})--------------------
 // -                        Open3D: www.open3d.org                            -
 // ----------------------------------------------------------------------------
 // The MIT License (MIT)
@@ -26,9 +27,15 @@
 
 #include <memory>
 #include <vector>
-#include "open3d/Open3D.h"
 
-int main(int argc, char **argv) {
+#include "open3d/Open3D.h"
+#include "open3d/geometry/Bvh.h"
+
+open3d::geometry::AxisAlignedBoundingBox Fn(open3d::geometry::TriangleBounds b) {
+    return b.GetBoundingBox();
+}
+
+int main(int argc, char** argv) {
     using namespace open3d::geometry;
     using namespace open3d::visualization;
 
@@ -36,15 +43,25 @@ int main(int argc, char **argv) {
     auto bounds = std::make_shared<std::vector<TriangleBounds>>();
 
     for (auto t : mesh->triangles_) {
-        bounds->emplace_back(mesh->vertices_[t[0]],
-                             mesh->vertices_[t[1]],
+        bounds->emplace_back(mesh->vertices_[t[0]], mesh->vertices_[t[1]],
                              mesh->vertices_[t[2]]);
     }
 
+    auto bvh = Bvh<TriangleBounds>::CreateTopDown(
+            [](const TriangleBounds& tri) { return tri.GetBoundingBox(); },
+            bounds);
+
+    // Visualization
+    // ======================================================================
     mesh->PaintUniformColor({.5, .5, .5});
     mesh->ComputeVertexNormals();
 
-    std::vector<std::shared_ptr<const Geometry>> geometries { mesh };
+    std::vector<std::shared_ptr<const Geometry>> geometries{mesh};
+    for (const auto& b : *bounds) {
+        auto box =
+                LineSet::CreateFromAxisAlignedBoundingBox(b.GetBoundingBox());
+        geometries.push_back(box);
+    }
     DrawGeometries(geometries);
 
     printf("DOne!\n");

@@ -26,11 +26,11 @@
 
 #pragma once
 
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <functional>
 #include <memory>
 #include <vector>
-#include <Eigen/Core>
-#include <Eigen/Geometry>
 
 #include "open3d/geometry/BoundingVolume.h"
 #include "open3d/geometry/Geometry.h"
@@ -40,47 +40,79 @@ namespace geometry {
 
 /// \class BvhNode
 ///
-/// This is a singular node in a binary bounding volume hierarchy which contains a unique
-/// pointer to both a left and right child node.
-/// \tparam T
+/// This is a singular node in a binary bounding volume hierarchy which contains
+/// a unique pointer to both a left and right child node. \tparam T
 template <class T>
 class BvhNode {
 public:
-
     const AxisAlignedBoundingBox& Box() const { return box_; }
     void SetBox(const AxisAlignedBoundingBox& box);
 
     std::unique_ptr<BvhNode<T>> left;
     std::unique_ptr<BvhNode<T>> right;
 
-   const std::vector<size_t>& Primitives() const { return primitive_indices_; }
+    const std::vector<size_t>& Primitives() const { return primitive_indices_; }
 
 private:
     AxisAlignedBoundingBox box_;
     std::vector<size_t> primitive_indices_;
 };
 
+template <class T>
+void BvhNode<T>::SetBox(const AxisAlignedBoundingBox& box) {
+    box_ = box;
+}
+
+
 /// \class Bvh
 ///
 /// \tparam T
 template <class T>
 class Bvh {
-    using Container = std::shared_ptr<std::vector<T>>;
-    using BoxFunc = std::function<AxisAlignedBoundingBox(T)>;
     using Node = BvhNode<T>;
-
+    using BoxFn = std::function<AxisAlignedBoundingBox(T)>;
+    using Container = std::shared_ptr<std::vector<T>>;
 public:
-    Bvh<T>(BoxFunc to_box, Container c);
+    Bvh<T>(BoxFn to_box,
+           std::shared_ptr<std::vector<T>> c) {
+            primitives_ = c;
+            box_func_ = to_box;
+    };
 
     const Node& Root() const { return root_; }
 
-private:
-    Node root_;
+    // Static Construction Methods
+    static std::unique_ptr<Bvh<T>> CreateTopDown(BoxFn to_box,
+                                                 Container primitives);
 
-    BoxFunc box_func_;
+private:
+    std::unique_ptr<Node> root_;
+
+    BoxFn box_func_;
     Container primitives_;
 };
 
+
+template <class T>
+std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(BoxFn to_box,
+                                              Container primitives) {
+    // Prepare the vector of indices and the vector of bounding boxes
+    std::vector<size_t> indices;
+    std::vector<AxisAlignedBoundingBox> boxes;
+
+    indices.reserve(primitives->size());
+    boxes.reserve(primitives->size());
+
+    for (size_t i = 0; i < primitives->size(); ++i) {
+        indices.push_back(i);
+        boxes.push_back(to_box((*primitives)[i]));
+    }
+
+    auto ptr = std::make_unique<Bvh<T>>(to_box, primitives);
+    ptr->root_ = std::make_unique<BvhNode<T>>();
+
+    return ptr;
 }
 
-}
+}  // namespace geometry
+}  // namespace open3d
