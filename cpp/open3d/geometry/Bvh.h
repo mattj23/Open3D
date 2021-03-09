@@ -38,43 +38,173 @@
 namespace open3d {
 namespace geometry {
 
+namespace bvh {
+using BoxVec = std::vector<AxisAlignedBoundingBox>;
+
 /// \class BvhNode
 ///
 /// This is a singular node in a binary bounding volume hierarchy which contains
-/// a unique pointer to both a left and right child node. \tparam T
+/// a unique pointer to both a left and right child node. Each node contains a
+/// vector of indices, which refer to the element position of primitives in the
+/// container vector used during construction of the BVH. The indices contained
+/// in this node are refer to the specific primitives which are contained within
+/// the bounding box of this specific node.
+///
+/// A node may *either* have child nodes *or* have child indices, it may not
+/// have both. Nodes with indices are leaf nodes.  Nodes without will have
+/// *both* left and right child nodes.
+///
+/// This paradigm diverges from some BVH implementations where there is a 1:1
+/// correspondence between a node and a primitive. What this allows is for nodes
+/// that contain multiple primitives, which can become more efficient in cases
+/// where the additional layers of bounding box checks near leaves can be more
+/// work than simply checking multiple primitives. \tparam T
 template <class T>
 class BvhNode {
 public:
     const AxisAlignedBoundingBox& Box() const { return box_; }
-    void SetBox(const AxisAlignedBoundingBox& box) {
-            box_ = box;
-    };
 
+    void SetBox(const BoxVec& boxes);
+
+    /// \brief Returns whether or not this node is a leaf node
+    bool IsLeaf() const { return left_ == nullptr; }
+
+    /// \brief A pointer to the left child of the node. Will be nullptr if this
+    /// node is a leaf node.
     std::unique_ptr<BvhNode<T>> left_;
+
+    /// \brief A pointer to the right child of the node. Will be nullptr if this
+    /// node is a leaf node.
     std::unique_ptr<BvhNode<T>> right_;
+
+    /// \brief A vector containing the indices of the primitives contained
+    /// within this node. The indices refer to positions in the vector of
+    /// original primitives used to create the BVH.
     std::vector<size_t> indices_;
+
+    /// \brief Splits a leaf node along the longest dimension of the bounding
+    /// box at the mean of the child bounding box centroids, producing two child
+    /// nodes and moving all indices into these children.
+    ///
+    /// \details This is a static method because it is not inherently a feature
+    /// of a BVH node, but rather an operation performed during top-down
+    /// construction. Bottom-up construction, on the other hand, does not
+    /// perform splits on nodes.
+    ///
+    /// This method will no-op on nodes which are not leaves (and thus do not
+    /// have child primitives)
+    static void SplitLeafObjMean(BvhNode<T>& node, const BoxVec& boxes);
 
 private:
     AxisAlignedBoundingBox box_;
 };
 
+template <class T>
+void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node, const BoxVec& boxes) {
+    /* This is an operation used in the top-down construction of a BVH and
+     * involves finding the longest cardinal direction of the node, splitting it
+     * in half, and then transferring the primitives into one node or the other
+     * based on where they sit in space.
+     */
+
+    // Number of primitives
+    if (node.indices_.size() < 3) {
+        return;
+    }
+    auto volume = node.box_.Volume();
+    auto extent = node.box_.GetExtent();
+    Eigen::Index cardinal;
+    if (extent.x() > extent.y() && extent.x() > extent.z()) {
+        // Longest in X direction
+        cardinal = 0;
+    } else if (extent.y() > extent.z()) {
+        // Longest in Y direction
+        cardinal = 1;
+    } else {
+        // Longest in Z direction
+        cardinal = 2;
+    }
+
+    // The object mean is the mean of the centroids in the cardinal direction
+    double sum = 0;
+    for (auto i : node.indices_) {
+        sum += boxes[i].GetCenter()[cardinal];
+    }
+    auto split = sum / node.indices_.size();
+
+    node.left_ = std::make_unique<BvhNode<T>>();
+    node.right_ = std::make_unique<BvhNode<T>>();
+
+    for (auto i : node.indices_) {
+        if (boxes[i].GetCenter()[cardinal] < split) {
+            node.left_->indices_.push_back(i);
+        } else {
+            node.right_->indices_.push_back(i);
+        }
+    }
+
+    node.left_->SetBox(boxes);
+    node.right_->SetBox(boxes);
+
+    // Check the volumes
+    if (node.left_->Box().Volume() + node.right_->Box().Volume() >
+        volume * 1.75) {
+        // Too big, let's delete
+        node.left_ = nullptr;
+        node.right_ = nullptr;
+    } else {
+        // This was a good split
+        node.indices_.clear();
+        BvhNode<T>::SplitLeafObjMean(node.left_, boxes);
+        BvhNode<T>::SplitLeafObjMean(node.right_, boxes);
+    }
+}
+
+template <class T>
+void BvhNode<T>::SetBox(const BoxVec& boxes) {
+    box_.Clear();
+    if (!IsLeaf()) {
+        box_ += left_->Box();
+        box_ += right_->Box();
+    } else {
+        for (auto i : indices_) {
+            box_ += boxes[i];
+        }
+    }
+}
+
+}  // namespace bvh
 
 /// \class Bvh
 ///
+/// \summary This is a general purpose Bounding Volume Hierarchy for
+/// non-specialized intersection and collision testing. It uses a template to
+/// allow for user defined primitives; the only requirements are that the user
+/// provide a function capable of retrieving an AxisAlignedBoundingBox from a
+/// primitive and that the user supplies a shared_ptr to a std::vector
+/// containing the primitives to be mapped.
+///
+/// \details This BVH implementation was designed with several competing
+/// objectives. First, to be relatively performant for a variety of
+/// applications. Second, to be flexible enough that it can be used with
+/// user-defined underlying primitives.  Third, to be straightforward and
+/// obvious in its use.
+///
+/// This is not a BVH that has been highly optimized for raytracing like Embree.
 /// \tparam T
 template <class T>
 class Bvh {
-    using Node = BvhNode<T>;
+    using Node = bvh::BvhNode<T>;
     using BoxFn = std::function<AxisAlignedBoundingBox(T)>;
     using Container = std::shared_ptr<std::vector<T>>;
+
 public:
-    Bvh<T>(BoxFn to_box,
-           std::shared_ptr<std::vector<T>> c) {
-            primitives_ = c;
-            box_func_ = to_box;
+    Bvh<T>(BoxFn to_box, Container primitives) {
+        primitives_ = primitives;
+        box_func_ = to_box;
     };
 
-    const Node& Root() const { return root_; }
+    const Node& Root() const { return root_.get(); }
 
     // Static Construction Methods
     static std::unique_ptr<Bvh<T>> CreateTopDown(BoxFn to_box,
@@ -85,8 +215,8 @@ private:
 
     BoxFn box_func_;
     Container primitives_;
+    std::vector<AxisAlignedBoundingBox> boxes_;
 };
-
 
 template <class T>
 std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(BoxFn to_box,
@@ -104,9 +234,9 @@ std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(BoxFn to_box,
         boxes.push_back(to_box((*primitives)[i]));
     }
 
-    for (auto i : bvh->root_->indices_) {
-        printf("%lu\n", i);
-    }
+    // Splitting
+    bvh->root_->SetBox(boxes);
+    bvh::BvhNode<T>::SplitLeafObjMean(*bvh->root_, *primitives);
 
     return bvh;
 }

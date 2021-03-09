@@ -25,19 +25,29 @@
 // IN THE SOFTWARE.
 // ----------------------------------------------------------------------------
 
+#include "open3d/geometry/Bvh.h"
+
+#include <chrono>
 #include <memory>
+#include <random>
 #include <vector>
 
 #include "open3d/Open3D.h"
-#include "open3d/geometry/Bvh.h"
 
-open3d::geometry::AxisAlignedBoundingBox Fn(open3d::geometry::TriangleBounds b) {
+open3d::geometry::AxisAlignedBoundingBox Fn(
+        open3d::geometry::TriangleBounds b) {
     return b.GetBoundingBox();
 }
+
+struct AABB {
+    Eigen::Vector3d min_bound_;
+    Eigen::Vector3d max_bound_;
+};
 
 int main(int argc, char** argv) {
     using namespace open3d::geometry;
     using namespace open3d::visualization;
+    using namespace std::chrono;
 
     auto mesh = TriangleMesh::CreateTorus();
     auto bounds = std::make_shared<std::vector<TriangleBounds>>();
@@ -51,12 +61,24 @@ int main(int argc, char** argv) {
             [](const TriangleBounds& tri) { return tri.GetBoundingBox(); },
             bounds);
 
+
     // Visualization
+    //
     // ======================================================================
     mesh->PaintUniformColor({.5, .5, .5});
     mesh->ComputeVertexNormals();
 
     std::vector<std::shared_ptr<const Geometry>> geometries{mesh};
+//    std::function<void(const bvh::BvhNode<TriangleBounds>&)> recurse;
+//    recurse = [&geometries, &recurse](const bvh::BvhNode<TriangleBounds> &node) {
+//      auto box = LineSet::CreateFromAxisAlignedBoundingBox(node.Box());
+//      geometries.push_back(box);
+//      if (node.left_) recurse(node.left_);
+//      if (node.right_) recurse(node.left_);
+//    };
+//
+//    recurse(bvh->Root());
+
     for (const auto& b : *bounds) {
         auto box =
                 LineSet::CreateFromAxisAlignedBoundingBox(b.GetBoundingBox());
