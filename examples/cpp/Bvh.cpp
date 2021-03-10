@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
 
     auto start = steady_clock::now();
     for (const auto& r : rays) {
-        auto potential = bvh->Possible(
+        auto potential = bvh->PossibleIntersections(
                 [&r](const AxisAlignedBoundingBox& box) {
                     return r.SlabAABB(box).has_value();
                 });
@@ -92,18 +92,6 @@ int main(int argc, char** argv) {
     auto function_time = end - start;
     std::cout << "lambda found " << c_f << " potential and took "
               << duration_cast<milliseconds>(function_time).count() << " ms"
-              << std::endl;
-
-    ulong c_t = 0;
-    start = steady_clock::now();
-    for (const auto& r : rays) {
-        auto potential = bvh->PossibleIntersections(r);
-        c_t += potential.size();
-    }
-    end = steady_clock::now();
-    auto trad_time = end - start;
-    std::cout << "traditional found " << c_t << " potential and took "
-              << duration_cast<milliseconds>(trad_time).count() << " ms"
               << std::endl;
 
     //    // Visualization

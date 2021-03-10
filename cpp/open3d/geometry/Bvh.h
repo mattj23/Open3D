@@ -216,16 +216,30 @@ public:
     /// intersect
     /// \return a vector of indicies contained by nodes which intersect with the
     /// test function
-    std::vector<size_t> PossibleIntersections(
-            const std::function<bool(const AxisAlignedBoundingBox&)>& fn);
 
-    std::vector<size_t> PossibleIntersections(const Line3D& line);
-
-
+    /// \brief Check the BVH for the indices of all possible primitives that
+    /// might intersect given a predicate for checking bounding boxes. This
+    /// performs a depth first search against the predicate, returning a
+    /// std::vector of the indices of primitives contained by positive testing
+    /// bounding boxes.
+    ///
+    /// \code{.cpp}
+    /// // This example shows the process of testing against a Line3D using the
+    /// // slab intersection method.
+    /// Line3D line{{0, 0, 0}, {1, 0, 0}};
+    /// auto indices = bvh->PossibleIntersections(
+    ///     [&line](const AxisAlignedBoundingBox& box) {
+    ///         return line.SlabAABB(box).has_value();
+    ///         });
+    /// \endcode
+    ///
+    /// \tparam F a function or functor which takes an axis aligned bounding
+    /// box and returns a bool
+    /// \param fn a function which returns true if an axis aligned bounding box
+    /// intersects.
+    /// \return
     template <typename F>
-    std::vector<size_t> Possible(F fn);
-
-
+    std::vector<size_t> PossibleIntersections(F fn);
 
     /// \brief A simple top-down construction method that builds a BVH
     ///
@@ -246,58 +260,7 @@ private:
 
 template <class T>
 template <typename F>
-std::vector<size_t> Bvh<T>::Possible(F fn) {
-    using Node = bvh::BvhNode<T>;
-    std::vector<size_t> indices;
-    std::vector<std::reference_wrapper<Node>> nodes{*root_};
-
-    while (!nodes.empty()) {
-        auto working = nodes.back();
-        nodes.pop_back();
-
-        if (!fn(working.get().Box())) continue;
-
-        if (working.get().IsLeaf()) {
-            for (auto i : working.get().indices_) {
-                indices.push_back(i);
-            }
-        } else {
-            nodes.push_back(*working.get().left_);
-            nodes.push_back(*working.get().right_);
-        }
-    }
-
-    return indices;
-}
-
-template <class T>
-std::vector<size_t> Bvh<T>::PossibleIntersections(const Line3D& line) {
-    using Node = bvh::BvhNode<T>;
-    std::vector<size_t> indices;
-    std::vector<std::reference_wrapper<Node>> nodes{*root_};
-
-    while (!nodes.empty()) {
-        auto working = nodes.back();
-        nodes.pop_back();
-
-        if (!line.SlabAABB(working.get().Box()).has_value()) continue;
-
-        if (working.get().IsLeaf()) {
-            for (auto i : working.get().indices_) {
-                indices.push_back(i);
-            }
-        } else {
-            nodes.push_back(*working.get().left_);
-            nodes.push_back(*working.get().right_);
-        }
-    }
-
-    return indices;
-}
-
-template <class T>
-std::vector<size_t> Bvh<T>::PossibleIntersections(
-        const std::function<bool(const AxisAlignedBoundingBox&)>& fn) {
+std::vector<size_t> Bvh<T>::PossibleIntersections(F fn) {
     using Node = bvh::BvhNode<T>;
     std::vector<size_t> indices;
     std::vector<std::reference_wrapper<Node>> nodes{*root_};
