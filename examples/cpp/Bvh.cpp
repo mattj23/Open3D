@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
 
     auto start = steady_clock::now();
     for (const auto& r : rays) {
-        auto potential = bvh->PossibleIntersections(
+        auto potential = bvh->Possible(
                 [&r](const AxisAlignedBoundingBox& box) {
                     return r.SlabAABB(box).has_value();
                 });
