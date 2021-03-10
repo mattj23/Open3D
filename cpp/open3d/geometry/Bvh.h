@@ -155,8 +155,8 @@ void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node, const BoxVec& boxes) {
     } else {
         // This was a good split
         node.indices_.clear();
-        BvhNode<T>::SplitLeafObjMean(node.left_, boxes);
-        BvhNode<T>::SplitLeafObjMean(node.right_, boxes);
+        BvhNode<T>::SplitLeafObjMean(*node.left_, boxes);
+        BvhNode<T>::SplitLeafObjMean(*node.right_, boxes);
     }
 }
 
@@ -204,9 +204,26 @@ public:
         box_func_ = to_box;
     };
 
-    const Node& Root() const { return root_.get(); }
+    /// \brief Get a const reference to the root node. Use this for short lived
+    /// access to the root node if needed; it does not confer shared ownership.
+    /// \return
+    const Node& Root() const { return *root_; }
 
-    // Static Construction Methods
+    /// \brief Check the BVH for the indices of all possible primitives that
+    /// might intersect given some test function
+    /// \param fn a std::function which tests bounding boxes to see if they
+    /// intersect
+    /// \return a vector of indicies contained by nodes which intersect with the
+    /// test function
+    std::vector<size_t> PossibleIntersections(
+            const std::function<bool(const AxisAlignedBoundingBox&)>& fn);
+
+    /// \brief A simple top-down construction method that builds a BVH
+    ///
+    /// \param to_box a function to take a primitive of type T and return the
+    /// axis aligned bounding box which encloses it
+    /// \param primitives a shared_ptr to a vector<T> containing the primitives
+    /// \return a constructed bounding volume hierarchy for type T
     static std::unique_ptr<Bvh<T>> CreateTopDown(BoxFn to_box,
                                                  Container primitives);
 
@@ -217,6 +234,32 @@ private:
     Container primitives_;
     std::vector<AxisAlignedBoundingBox> boxes_;
 };
+
+template <class T>
+std::vector<size_t> Bvh<T>::PossibleIntersections(
+        const std::function<bool(const AxisAlignedBoundingBox&)>& fn) {
+    using Node = bvh::BvhNode<T>;
+    std::vector<size_t> indices;
+    std::vector<std::reference_wrapper<Node>> nodes{*root_};
+
+    while (!nodes.empty()) {
+        auto working = nodes.back();
+        nodes.pop_back();
+
+        if (!fn(working.get().Box())) continue;
+
+        if (working.get().IsLeaf()) {
+            for (auto i : working.get().indices_) {
+                indices.push_back(i);
+            }
+        } else {
+            nodes.push_back(*working.get().left_);
+            nodes.push_back(*working.get().right_);
+        }
+    }
+
+    return indices;
+}
 
 template <class T>
 std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(BoxFn to_box,
@@ -236,10 +279,9 @@ std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(BoxFn to_box,
 
     // Splitting
     bvh->root_->SetBox(boxes);
-    bvh::BvhNode<T>::SplitLeafObjMean(*bvh->root_, *primitives);
+    bvh::BvhNode<T>::SplitLeafObjMean(*bvh->root_, boxes);
 
     return bvh;
 }
-
 }  // namespace geometry
 }  // namespace open3d

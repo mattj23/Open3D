@@ -61,6 +61,18 @@ int main(int argc, char** argv) {
             [](const TriangleBounds& tri) { return tri.GetBoundingBox(); },
             bounds);
 
+    Ray3D ray{{0, 0, 0}, {0.01, 1, 0.01}};
+
+    auto line = std::make_shared<LineSet>();
+    line->points_.emplace_back(0, 0, 0);
+    line->points_.emplace_back(ray.Direction() * 3.);
+    line->lines_.emplace_back(0, 1);
+    line->PaintUniformColor({1, 0, 0});
+
+    auto potential = bvh->PossibleIntersections(
+            [&ray](const AxisAlignedBoundingBox& box) {
+                return ray.SlabAABB(box).has_value();
+            });
 
     // Visualization
     //
@@ -68,22 +80,30 @@ int main(int argc, char** argv) {
     mesh->PaintUniformColor({.5, .5, .5});
     mesh->ComputeVertexNormals();
 
-    std::vector<std::shared_ptr<const Geometry>> geometries{mesh};
-//    std::function<void(const bvh::BvhNode<TriangleBounds>&)> recurse;
-//    recurse = [&geometries, &recurse](const bvh::BvhNode<TriangleBounds> &node) {
-//      auto box = LineSet::CreateFromAxisAlignedBoundingBox(node.Box());
-//      geometries.push_back(box);
-//      if (node.left_) recurse(node.left_);
-//      if (node.right_) recurse(node.left_);
-//    };
-//
-//    recurse(bvh->Root());
+    std::vector<std::shared_ptr<const Geometry>> geometries{mesh, line};
 
-    for (const auto& b : *bounds) {
-        auto box =
-                LineSet::CreateFromAxisAlignedBoundingBox(b.GetBoundingBox());
+    for (auto i : potential) {
+        auto box = LineSet::CreateFromAxisAlignedBoundingBox(
+                (*bounds)[i].GetBoundingBox());
         geometries.push_back(box);
     }
+
+    //    std::function<void(const bvh::BvhNode<TriangleBounds>&)> recurse;
+    //    recurse = [&geometries,
+    //               &recurse](const bvh::BvhNode<TriangleBounds>& node) {
+    //        auto box = LineSet::CreateFromAxisAlignedBoundingBox(node.Box());
+    //        geometries.push_back(box);
+    //        if (node.left_) recurse(*node.left_);
+    //        if (node.right_) recurse(*node.right_);
+    //    };
+    //
+    //    recurse(bvh->Root());
+
+    //    for (const auto& b : *bounds) {
+    //        auto box =
+    //                LineSet::CreateFromAxisAlignedBoundingBox(b.GetBoundingBox());
+    //        geometries.push_back(box);
+    //    }
     DrawGeometries(geometries);
 
     printf("DOne!\n");
