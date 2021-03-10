@@ -238,7 +238,7 @@ public:
     /// \param fn a function which returns true if an axis aligned bounding box
     /// intersects.
     /// \return
-    template <typename F>
+    template <class F>
     std::vector<size_t> PossibleIntersections(F fn);
 
     /// \brief A simple top-down construction method that builds a BVH
@@ -259,7 +259,7 @@ private:
 };
 
 template <class T>
-template <typename F>
+template <class F>
 std::vector<size_t> Bvh<T>::PossibleIntersections(F fn) {
     using Node = bvh::BvhNode<T>;
     std::vector<size_t> indices;

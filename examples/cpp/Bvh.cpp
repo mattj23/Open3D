@@ -34,18 +34,30 @@
 
 #include "open3d/Open3D.h"
 
-open3d::geometry::AxisAlignedBoundingBox Fn(
-        open3d::geometry::TriangleBounds b) {
-    return b.GetBoundingBox();
+using namespace open3d::geometry;
+
+size_t test_fn(std::function<AxisAlignedBoundingBox(TriangleBounds)> fn,
+               std::shared_ptr<std::vector<TriangleBounds>> bounds) {
+    std::vector<AxisAlignedBoundingBox> boxes;
+    boxes.reserve(bounds->size());
+
+    for (size_t i = 0; i < bounds->size(); ++i) {
+        boxes.push_back(fn((*bounds)[i]));
+    }
+    return boxes.size();
 }
 
-struct AABB {
-    Eigen::Vector3d min_bound_;
-    Eigen::Vector3d max_bound_;
-};
+size_t test_manual(std::shared_ptr<std::vector<TriangleBounds>> bounds) {
+    std::vector<AxisAlignedBoundingBox> boxes;
+    boxes.reserve(bounds->size());
+
+    for (size_t i = 0; i < bounds->size(); ++i) {
+        boxes.push_back((*bounds)[i].GetBoundingBox());
+    }
+    return boxes.size();
+}
 
 int main(int argc, char** argv) {
-    using namespace open3d::geometry;
     using namespace open3d::visualization;
     using namespace std::chrono;
 
@@ -60,18 +72,6 @@ int main(int argc, char** argv) {
 
     // Create a top down BVH
     auto f = [](const TriangleBounds& tri) { return tri.GetBoundingBox(); };
-    auto bvh = Bvh<TriangleBounds>::CreateTopDown(f, bounds);
-
-    // Create some random rays
-    std::random_device rnd;
-    std::mt19937 mt(rnd());
-    std::uniform_real_distribution<double> dist(-1, 1);
-
-    std::vector<Ray3D> rays;
-    for (size_t i = 0; i < 1000000; ++i) {
-        Ray3D r{{dist(mt), dist(mt), dist(mt)}, {dist(mt), dist(mt), dist(mt)}};
-        rays.emplace_back(r);
-    }
 
     //    auto line = std::make_shared<LineSet>();
     //    line->points_.emplace_back(0, 0, 0);
@@ -79,20 +79,33 @@ int main(int argc, char** argv) {
     //    line->lines_.emplace_back(0, 1);
     //    line->PaintUniformColor({1, 0, 0});
     ulong c_f = 0;
+    constexpr size_t run_count = 100000;
 
     auto start = steady_clock::now();
-    for (const auto& r : rays) {
-        auto potential = bvh->PossibleIntersections(
-                [&r](const AxisAlignedBoundingBox& box) {
-                    return r.SlabAABB(box).has_value();
-                });
-        c_f += potential.size();
+    for (size_t i = 0; i < run_count; ++i) {
+        c_f += test_fn(f, bounds);
     }
     auto end = steady_clock::now();
     auto function_time = end - start;
     std::cout << "lambda found " << c_f << " potential and took "
               << duration_cast<milliseconds>(function_time).count() << " ms"
               << std::endl;
+
+    size_t c_t = 0;
+    start = steady_clock::now();
+    for (size_t i = 0; i < run_count; ++i) {
+        c_t += test_manual(bounds);
+    }
+    end = steady_clock::now();
+    auto trad_time = end - start;
+    std::cout << "trad found " << c_t << " potential and took "
+              << duration_cast<milliseconds>(trad_time).count() << " ms"
+              << std::endl;
+
+    auto excess = static_cast<double>(
+            duration_cast<microseconds>(function_time - trad_time).count());
+    std::cout << "overhead: " << excess / static_cast<double>(c_t)
+              << " us per call" << std::endl;
 
     //    // Visualization
     //    //
