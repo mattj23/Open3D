@@ -34,6 +34,7 @@
 
 #include "open3d/geometry/BoundingVolume.h"
 #include "open3d/geometry/Geometry.h"
+#include "open3d/geometry/Line3D.h"
 
 namespace open3d {
 namespace geometry {
@@ -218,6 +219,8 @@ public:
     std::vector<size_t> PossibleIntersections(
             const std::function<bool(const AxisAlignedBoundingBox&)>& fn);
 
+    std::vector<size_t> PossibleIntersections(const Line3D& line);
+
     /// \brief A simple top-down construction method that builds a BVH
     ///
     /// \param to_box a function to take a primitive of type T and return the
@@ -234,6 +237,31 @@ private:
     Container primitives_;
     std::vector<AxisAlignedBoundingBox> boxes_;
 };
+
+template <class T>
+std::vector<size_t> Bvh<T>::PossibleIntersections(const Line3D& line) {
+    using Node = bvh::BvhNode<T>;
+    std::vector<size_t> indices;
+    std::vector<std::reference_wrapper<Node>> nodes{*root_};
+
+    while (!nodes.empty()) {
+        auto working = nodes.back();
+        nodes.pop_back();
+
+        if (!line.SlabAABB(working.get().Box()).has_value()) continue;
+
+        if (working.get().IsLeaf()) {
+            for (auto i : working.get().indices_) {
+                indices.push_back(i);
+            }
+        } else {
+            nodes.push_back(*working.get().left_);
+            nodes.push_back(*working.get().right_);
+        }
+    }
+
+    return indices;
+}
 
 template <class T>
 std::vector<size_t> Bvh<T>::PossibleIntersections(

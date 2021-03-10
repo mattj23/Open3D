@@ -49,6 +49,7 @@ int main(int argc, char** argv) {
     using namespace open3d::visualization;
     using namespace std::chrono;
 
+    // Create a torus and a vector of triangle bounds
     auto mesh = TriangleMesh::CreateTorus();
     auto bounds = std::make_shared<std::vector<TriangleBounds>>();
 
@@ -57,37 +58,69 @@ int main(int argc, char** argv) {
                              mesh->vertices_[t[2]]);
     }
 
-    auto bvh = Bvh<TriangleBounds>::CreateTopDown(
-            [](const TriangleBounds& tri) { return tri.GetBoundingBox(); },
-            bounds);
+    // Create a top down BVH
+    auto f = [](const TriangleBounds& tri) { return tri.GetBoundingBox(); };
+    auto bvh = Bvh<TriangleBounds>::CreateTopDown(f, bounds);
 
-    Ray3D ray{{0, 0, 0}, {0.01, 1, 0.01}};
+    // Create some random rays
+    std::random_device rnd;
+    std::mt19937 mt(rnd());
+    std::uniform_real_distribution<double> dist(-1, 1);
 
-    auto line = std::make_shared<LineSet>();
-    line->points_.emplace_back(0, 0, 0);
-    line->points_.emplace_back(ray.Direction() * 3.);
-    line->lines_.emplace_back(0, 1);
-    line->PaintUniformColor({1, 0, 0});
-
-    auto potential = bvh->PossibleIntersections(
-            [&ray](const AxisAlignedBoundingBox& box) {
-                return ray.SlabAABB(box).has_value();
-            });
-
-    // Visualization
-    //
-    // ======================================================================
-    mesh->PaintUniformColor({.5, .5, .5});
-    mesh->ComputeVertexNormals();
-
-    std::vector<std::shared_ptr<const Geometry>> geometries{mesh, line};
-
-    for (auto i : potential) {
-        auto box = LineSet::CreateFromAxisAlignedBoundingBox(
-                (*bounds)[i].GetBoundingBox());
-        geometries.push_back(box);
+    std::vector<Ray3D> rays;
+    for (size_t i = 0; i < 1000000; ++i) {
+        Ray3D r{{dist(mt), dist(mt), dist(mt)}, {dist(mt), dist(mt), dist(mt)}};
+        rays.emplace_back(r);
     }
 
+    //    auto line = std::make_shared<LineSet>();
+    //    line->points_.emplace_back(0, 0, 0);
+    //    line->points_.emplace_back(ray.Direction() * 3.);
+    //    line->lines_.emplace_back(0, 1);
+    //    line->PaintUniformColor({1, 0, 0});
+    ulong c_f = 0;
+
+    auto start = steady_clock::now();
+    for (const auto& r : rays) {
+        auto potential = bvh->PossibleIntersections(
+                [&r](const AxisAlignedBoundingBox& box) {
+                    return r.SlabAABB(box).has_value();
+                });
+        c_f += potential.size();
+    }
+    auto end = steady_clock::now();
+    auto function_time = end - start;
+    std::cout << "lambda found " << c_f << " potential and took "
+              << duration_cast<milliseconds>(function_time).count() << " ms"
+              << std::endl;
+
+    ulong c_t = 0;
+    start = steady_clock::now();
+    for (const auto& r : rays) {
+        auto potential = bvh->PossibleIntersections(r);
+        c_t += potential.size();
+    }
+    end = steady_clock::now();
+    auto trad_time = end - start;
+    std::cout << "traditional found " << c_t << " potential and took "
+              << duration_cast<milliseconds>(trad_time).count() << " ms"
+              << std::endl;
+
+    //    // Visualization
+    //    //
+    //    //
+    //    ======================================================================
+    //    mesh->PaintUniformColor({.5, .5, .5});
+    //    mesh->ComputeVertexNormals();
+    //
+    //    std::vector<std::shared_ptr<const Geometry>> geometries{mesh, line};
+    //
+    //    for (auto i : potential) {
+    //        auto box = LineSet::CreateFromAxisAlignedBoundingBox(
+    //                (*bounds)[i].GetBoundingBox());
+    //        geometries.push_back(box);
+    //    }
+    //
     //    std::function<void(const bvh::BvhNode<TriangleBounds>&)> recurse;
     //    recurse = [&geometries,
     //               &recurse](const bvh::BvhNode<TriangleBounds>& node) {
@@ -104,7 +137,7 @@ int main(int argc, char** argv) {
     //                LineSet::CreateFromAxisAlignedBoundingBox(b.GetBoundingBox());
     //        geometries.push_back(box);
     //    }
-    DrawGeometries(geometries);
+    //    DrawGeometries(geometries);
 
-    printf("DOne!\n");
+    //    printf("DOne!\n");
 }
