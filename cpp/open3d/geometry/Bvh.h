@@ -42,10 +42,15 @@ namespace geometry {
 namespace bvh {
 using BoxVec = std::vector<AxisAlignedBoundingBox>;
 
+/// \struct SplitOptions
+/// \brief This is a set of options which sets the behavior of top-down node
+/// splitting operations during BVH construction.
 struct SplitOptions {
     utility::optional<size_t> min_primitives;
     utility::optional<double> volume_ratio;
 
+    /// \brief Return an empty option set, such that the splitting algorithim
+    /// will perform its default behavior.
     static SplitOptions None() { return {{}, {}}; }
 };
 
@@ -70,8 +75,13 @@ struct SplitOptions {
 template <class T>
 class BvhNode {
 public:
+    /// \brief Get a reference to the axis aligned bounding box for this node
     const AxisAlignedBoundingBox& Box() const { return box_; }
 
+    /// \brief Set the bounding box of the node based on its internal state. If
+    /// the node is a leaf node, this will be the sum of the bounding boxes of
+    /// all of the contained primitives. If it is not a leaf node, this box
+    /// will be the sum of its left and right child boxes.
     void SetBox(const BoxVec& boxes);
 
     /// \brief Returns whether or not this node is a leaf node
@@ -101,11 +111,23 @@ public:
     ///
     /// This method will no-op on nodes which are not leaves (and thus do not
     /// have child primitives)
+    /// \param node a temporary reference to a BvhNode<T> to be split
+    /// \param boxes the std::vector of all bounding boxes where each element
+    /// i is the bounding box associated with the primitive with index i in the
+    /// Bvh's primitives vector
+    /// \param options a SplitOptions struct which will set the behavior for the
+    /// splitting operation
     static void SplitLeafObjMean(BvhNode<T>& node,
                                  const BoxVec& boxes,
                                  const SplitOptions& options);
 
 private:
+    /// Each BvhNode<T> has a bounding box associated with it, such that all of
+    /// the combined primitives contained by all of the leaf nodes which are
+    /// descendants of this node are contained within this box. In the case of
+    /// a leaf node, this box is simply the sum of the bounding boxes for the
+    /// primitives contained by the node.  For non-leaf nodes, this box is the
+    /// sum of the left and right child nodes.
     AxisAlignedBoundingBox box_;
 };
 
@@ -231,16 +253,39 @@ void BvhNode<T>::SetBox(const BoxVec& boxes) {
 /// allow for user defined primitives; the only requirements are that the user
 /// provide a function capable of retrieving an AxisAlignedBoundingBox from a
 /// primitive and that the user supplies a shared_ptr to a std::vector
-/// containing the primitives to be mapped.
+/// containing the primitives to be mapped. Use this template class as a
+/// foundation to create BVHs for different concrete types.
 ///
-/// \details This BVH implementation was designed with several competing
-/// objectives. First, to be relatively performant for a variety of
-/// applications. Second, to be flexible enough that it can be used with
-/// user-defined underlying primitives.  Third, to be straightforward and
-/// obvious in its use.
+/// \details This BVH implementation is meant to be a general purpose building
+/// block for creating bounding volume hierarchies for concrete types. It was
+/// designed with a few overall objectives:
+///     1. Be general enough to handle user implemented types
+///     2. Be performance conscious; avoid major inefficiencies but not at the
+///         cost of ceasing to be generalizable
+///     3. Be easy to use, but only with minor performance concessions
 ///
-/// This is not a BVH that has been highly optimized for raytracing like Embree.
-/// \tparam T
+/// To that end this BVH is generally suitable for geometric operations like
+/// intersection tests, measurements, and basic collision pruning in simple
+/// graphics and scientific applications, where it will perform many orders of
+/// magnitude faster than exhaustive checking.  And though it will perform
+/// reasonably well for ray/line intersections you should not expect to see
+/// performance on par with highly optimized parallel/SIMD implementations like
+/// Embree.
+///
+/// The implementation consists of a binary hierarchy of BvhNode<T> objects,
+/// owned exclusively by the Bvh<T> object itself through the use of
+/// std::unique_ptr. It also requires a std::shared_ptr to a std::vector of
+/// the primitive type T. This type T is immaterial except that it must be
+/// convertible to an AxisAlignedBoundingBox by a function provided to the
+/// creation.
+///
+/// The std::shared_ptr to the vector of primitives *implies shared ownership*,
+/// in that the Bvh is meaningless without these primitives in the exact state
+/// and order that they were in when the Bvh was constructed. If the primitives
+/// or the containing vector is altered while the Bvh is extant, the Bvh will
+/// have no way of knowing, but will no longer accurately represent the
+/// underlying data is was constructed for.
+/// \tparam T the primitive type contained by the BVH
 template <class T>
 class Bvh {
     using Node = bvh::BvhNode<T>;
@@ -290,6 +335,8 @@ public:
     /// \param to_box a function to take a primitive of type T and return the
     /// axis aligned bounding box which encloses it
     /// \param primitives a shared_ptr to a vector<T> containing the primitives
+    /// \param options a SplitOptions object which contains various optional
+    /// criteria for the top-down recursive splitting
     /// \return a constructed bounding volume hierarchy for type T
     template <class F>
     static std::unique_ptr<Bvh<T>> CreateTopDown(
@@ -332,11 +379,17 @@ template <class T>
 template <class F>
 std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(
         F box_fn, Container primitives, const bvh::SplitOptions& options) {
-    std::vector<AxisAlignedBoundingBox> boxes;
-
+    // Create the BVH and reserve memory for the indices
     auto bvh = std::make_unique<Bvh<T>>(primitives);
     bvh->root_ = std::make_unique<Node>();
     bvh->root_->indices_.reserve(primitives->size());
+
+    // Create the vector of bounding box objects. Indices are common between the
+    // bounding boxes and the primitives such that boxes[i] is the bounding box
+    // for the object in primitives[i]. The boxes are generated by the function
+    // type F argument box_fn, which must take a primitive of type T and return
+    // an axis aligned bounding box
+    std::vector<AxisAlignedBoundingBox> boxes;
     boxes.reserve(primitives->size());
 
     for (size_t i = 0; i < primitives->size(); ++i) {
@@ -344,11 +397,14 @@ std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(
         boxes.push_back(box_fn((*primitives)[i]));
     }
 
-    // Splitting
+    // At this point the root node contains all primitives. We compute the
+    // bounding box for the root node from its contained primitives and then
+    // begin the recursive splitting algorithm.
     bvh->root_->SetBox(boxes);
     bvh::BvhNode<T>::SplitLeafObjMean(*bvh->root_, boxes, options);
 
     return bvh;
 }
+
 }  // namespace geometry
 }  // namespace open3d
