@@ -28,6 +28,7 @@ set(UNIT_TEST_SOURCE_FILES
     core/MemoryManager.cpp
     core/Tensor.cpp
     core/SizeVector.cpp
+    geometry/Bvh.cpp
     geometry/PointCloud.cpp
     geometry/TriangleMesh.cpp
     geometry/VoxelGrid.cpp
