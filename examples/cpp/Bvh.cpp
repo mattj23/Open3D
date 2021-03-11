@@ -72,56 +72,35 @@ int main(int argc, char** argv) {
 
     // Create a top down BVH
     auto f = [](const TriangleBounds& tri) { return tri.GetBoundingBox(); };
+    auto bvh = Bvh<TriangleBounds>::CreateTopDown(f, bounds,
+                                                  bvh::SplitOptions::None());
 
-    //    auto line = std::make_shared<LineSet>();
-    //    line->points_.emplace_back(0, 0, 0);
-    //    line->points_.emplace_back(ray.Direction() * 3.);
-    //    line->lines_.emplace_back(0, 1);
-    //    line->PaintUniformColor({1, 0, 0});
-    ulong c_f = 0;
-    constexpr size_t run_count = 100000;
+    Ray3D ray{{0, 0, 0}, {0, 1, 0}};
 
-    auto start = steady_clock::now();
-    for (size_t i = 0; i < run_count; ++i) {
-        c_f += test_fn(f, bounds);
+    auto line = std::make_shared<LineSet>();
+    line->points_.emplace_back(0, 0, 0);
+    line->points_.emplace_back(ray.Direction() * 3.);
+    line->lines_.emplace_back(0, 1);
+    line->PaintUniformColor({1, 0, 0});
+
+    // Visualization
+    // ======================================================================
+    mesh->PaintUniformColor({.5, .5, .5});
+    mesh->ComputeVertexNormals();
+
+    std::vector<std::shared_ptr<const Geometry>> geometries{mesh, line};
+
+    auto potential = bvh->PossibleIntersections(
+            [&ray](const AxisAlignedBoundingBox& box) {
+                return ray.SlabAABB(box).has_value();
+            });
+
+    for (auto i : potential) {
+        auto box = LineSet::CreateFromAxisAlignedBoundingBox(
+                (*bounds)[i].GetBoundingBox());
+        geometries.push_back(box);
     }
-    auto end = steady_clock::now();
-    auto function_time = end - start;
-    std::cout << "lambda found " << c_f << " potential and took "
-              << duration_cast<milliseconds>(function_time).count() << " ms"
-              << std::endl;
 
-    size_t c_t = 0;
-    start = steady_clock::now();
-    for (size_t i = 0; i < run_count; ++i) {
-        c_t += test_manual(bounds);
-    }
-    end = steady_clock::now();
-    auto trad_time = end - start;
-    std::cout << "trad found " << c_t << " potential and took "
-              << duration_cast<milliseconds>(trad_time).count() << " ms"
-              << std::endl;
-
-    auto excess = static_cast<double>(
-            duration_cast<microseconds>(function_time - trad_time).count());
-    std::cout << "overhead: " << excess / static_cast<double>(c_t)
-              << " us per call" << std::endl;
-
-    //    // Visualization
-    //    //
-    //    //
-    //    ======================================================================
-    //    mesh->PaintUniformColor({.5, .5, .5});
-    //    mesh->ComputeVertexNormals();
-    //
-    //    std::vector<std::shared_ptr<const Geometry>> geometries{mesh, line};
-    //
-    //    for (auto i : potential) {
-    //        auto box = LineSet::CreateFromAxisAlignedBoundingBox(
-    //                (*bounds)[i].GetBoundingBox());
-    //        geometries.push_back(box);
-    //    }
-    //
     //    std::function<void(const bvh::BvhNode<TriangleBounds>&)> recurse;
     //    recurse = [&geometries,
     //               &recurse](const bvh::BvhNode<TriangleBounds>& node) {
@@ -130,7 +109,7 @@ int main(int argc, char** argv) {
     //        if (node.left_) recurse(*node.left_);
     //        if (node.right_) recurse(*node.right_);
     //    };
-    //
+
     //    recurse(bvh->Root());
 
     //    for (const auto& b : *bounds) {
@@ -138,7 +117,7 @@ int main(int argc, char** argv) {
     //                LineSet::CreateFromAxisAlignedBoundingBox(b.GetBoundingBox());
     //        geometries.push_back(box);
     //    }
-    //    DrawGeometries(geometries);
+    DrawGeometries(geometries);
 
-    //    printf("DOne!\n");
+    printf("DOne!\n");
 }
