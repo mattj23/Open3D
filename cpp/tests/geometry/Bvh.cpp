@@ -320,5 +320,50 @@ INSTANTIATE_TEST_CASE_P(Tests,
                                intr_t{{6, 0, 0}, {-6, 0, 7}, {0, 1, 4, 5}},
                                intr_t{{0, 9, 0}, {0, -9, 7}, {2, 3, 4, 5}}));
 
+/*
+ * Use the point to AABB distance functions to test the closest and furthest
+ * primitive check pruning
+ */
+
+TEST(BvhDistanceTests, TraverseClosest) {
+    using namespace std;
+    Vector3d v;
+
+    auto closest = [&v](const AABB& box) {
+        // The closest point on the box is found by clamping the test point to
+        // the bounds
+        auto cx = max(min(v.x(), box.max_bound_.x()), box.min_bound_.x());
+        auto cy = max(min(v.y(), box.max_bound_.y()), box.min_bound_.y());
+        auto cz = max(min(v.z(), box.max_bound_.z()), box.min_bound_.z());
+        Vector3d c{cx, cy, cz};
+        return (c - v).norm();
+    };
+
+    auto furthest = [&v](const AABB& box) {
+        // The furthest point on the AABB is always going to be one of the
+        // eight corners
+        double dist = 0;
+        for (const auto& p : box.GetBoxPoints()) {
+            dist = std::max((p - v).norm(), dist);
+        }
+        return dist;
+    };
+
+    auto spheres = std::make_shared<Spheres>();
+    spheres->emplace_back(Sphere{{5, 0, 0}, 1});
+    spheres->emplace_back(Sphere{{6, 0, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 7, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 9, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 0, 8}, 1});
+    spheres->emplace_back(Sphere{{0, 0, 6}, 1});
+
+    // Create the BVH
+    auto bvh = Bvh<Sphere>::CreateTopDown(
+            [](const Sphere& sphere) { return sphere.GetBox(); }, spheres,
+            bvh::SplitOptions::None());
+
+    auto results = bvh->PossibleClosest(closest, furthest);
+}
+
 }  // namespace tests
 }  // namespace open3d

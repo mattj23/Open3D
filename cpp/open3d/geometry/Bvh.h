@@ -345,6 +345,9 @@ public:
     template <class F>
     std::vector<size_t> PossibleIntersections(F fn);
 
+    template <class Fc, class Ff>
+    std::vector<size_t> PossibleClosest(Fc closest, Ff furthest);
+
     /// \brief A simple top-down construction method that builds a BVH
     ///
     /// \param to_box a function to take a primitive of type T and return the
@@ -384,6 +387,61 @@ std::vector<size_t> Bvh<T>::PossibleIntersections(F fn) {
         } else {
             nodes.push_back(*working.get().left_);
             nodes.push_back(*working.get().right_);
+        }
+    }
+
+    return indices;
+}
+
+template <class T>
+template <class Fc, class Ff>
+std::vector<size_t> Bvh<T>::PossibleClosest(Fc closest, Ff furthest) {
+    /*
+     * Closest distance pruning
+     *
+     * The underlying principle is that out of any
+     * set of bounding boxes, one of them will have the smallest *furthest*
+     * distance from a given entity. Any bounding box which does not have a
+     * *closest* distance smaller than that threshold cannot possibly contain
+     * anything closer to the entity than the box which produced the
+     * threshold.
+     */
+    using Node = bvh::BvhNode<T>;
+
+    struct search_t {
+        double close;
+        double far;
+        std::reference_wrapper<Node> node;
+    };
+
+    auto root_closest = closest((*root_).Box());
+    auto root_furthest = furthest((*root_).Box());
+
+    std::vector<search_t> nodes {{root_closest, root_furthest, *root_}};
+
+    double closest_furthest = root_furthest;
+    while (true) {
+        auto non_leaf = std::find_if(nodes.begin(), nodes.end(), [](const search_t& x) { return !x.node.get().IsLeaf();});
+        if (non_leaf == nodes.end()) {
+            break;
+        }
+
+        search_t left{closest((*non_leaf).node.get().left_->Box()), furthest((*non_leaf).node.get().left_->Box()), *(*non_leaf).node.get().left_};
+        search_t right{closest((*non_leaf).node.get().right_->Box()), furthest((*non_leaf).node.get().right_->Box()), *(*non_leaf).node.get().right_};
+        nodes.erase(non_leaf);
+
+        closest_furthest = std::min(closest_furthest, std::min(left.far, right.far));
+        nodes.erase(std::remove_if(nodes.begin(),
+                                   nodes.end(),
+                                   [&](const search_t& t) {
+                                       return t.close > closest_furthest;
+                                   }), nodes.end());
+    }
+
+    std::vector<size_t> indices;
+    for (const auto& n : nodes) {
+        for (auto i : n.node.get().indices_){
+            indices.push_back(i);
         }
     }
 
