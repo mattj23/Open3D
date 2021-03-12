@@ -140,6 +140,7 @@ void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node,
      * in half, and then transferring the primitives into one node or the other
      * based on where they sit in space.
      */
+    if (!node.IsLeaf()) return;
 
     // First we will check to see if we should abort the splitting of this node.
     // An indices_ size of 0 means this is not a leaf node, and should not be
@@ -149,7 +150,7 @@ void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node,
     // for abandoning the split exist we simply return out of the function
     // before doing anything.
     if (options.min_primitives.has_value()) {
-        if (node.indices_.size() < options.min_primitives.value()) return;
+        if (node.indices_.size() <= options.min_primitives.value()) return;
     } else if (node.indices_.size() <= 1) {
         return;
     }
