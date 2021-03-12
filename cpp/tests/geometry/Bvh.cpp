@@ -327,7 +327,7 @@ INSTANTIATE_TEST_CASE_P(Tests,
 
 TEST(BvhDistanceTests, TraverseClosest) {
     using namespace std;
-    Vector3d v;
+    Vector3d v{10, 0, 0};
 
     auto closest = [&v](const AABB& box) {
         // The closest point on the box is found by clamping the test point to

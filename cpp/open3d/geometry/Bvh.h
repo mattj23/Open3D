@@ -407,6 +407,9 @@ std::vector<size_t> Bvh<T>::PossibleClosest(Fc closest, Ff furthest) {
      * threshold.
      */
     using Node = bvh::BvhNode<T>;
+    using std::find_if;
+    using std::min;
+    using std::remove_if;
 
     struct search_t {
         double close;
@@ -414,35 +417,39 @@ std::vector<size_t> Bvh<T>::PossibleClosest(Fc closest, Ff furthest) {
         std::reference_wrapper<Node> node;
     };
 
-    auto root_closest = closest((*root_).Box());
-    auto root_furthest = furthest((*root_).Box());
+    std::vector<search_t> nodes{
+            {closest(root_->Box()), furthest(root_->Box()), *root_}};
 
-    std::vector<search_t> nodes {{root_closest, root_furthest, *root_}};
-
-    double closest_furthest = root_furthest;
+    double closest_furthest = nodes.front().far;
     while (true) {
-        auto non_leaf = std::find_if(nodes.begin(), nodes.end(), [](const search_t& x) { return !x.node.get().IsLeaf();});
+        auto non_leaf = find_if(
+                nodes.begin(), nodes.end(),
+                [](const search_t& x) { return !x.node.get().IsLeaf(); });
         if (non_leaf == nodes.end()) {
             break;
         }
 
-        search_t left{closest((*non_leaf).node.get().left_->Box()), furthest((*non_leaf).node.get().left_->Box()), *(*non_leaf).node.get().left_};
-        search_t right{closest((*non_leaf).node.get().right_->Box()), furthest((*non_leaf).node.get().right_->Box()), *(*non_leaf).node.get().right_};
+        search_t left{closest(non_leaf->node.get().left_->Box()),
+                      furthest(non_leaf->node.get().left_->Box()),
+                      *non_leaf->node.get().left_};
+        search_t right{closest(non_leaf->node.get().right_->Box()),
+                       furthest(non_leaf->node.get().right_->Box()),
+                       *non_leaf->node.get().right_};
         nodes.erase(non_leaf);
         nodes.push_back(left);
         nodes.push_back(right);
 
-        closest_furthest = std::min(closest_furthest, std::min(left.far, right.far));
-        nodes.erase(std::remove_if(nodes.begin(),
-                                   nodes.end(),
-                                   [&](const search_t& t) {
-                                       return t.close > closest_furthest;
-                                   }), nodes.end());
+        closest_furthest = min(closest_furthest, min(left.far, right.far));
+        nodes.erase(remove_if(nodes.begin(), nodes.end(),
+                              [&](const search_t& t) {
+                                  return t.close > closest_furthest;
+                              }),
+                    nodes.end());
     }
 
     std::vector<size_t> indices;
     for (const auto& n : nodes) {
-        for (auto i : n.node.get().indices_){
+        for (auto i : n.node.get().indices_) {
             indices.push_back(i);
         }
     }
