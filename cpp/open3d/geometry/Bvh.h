@@ -429,6 +429,8 @@ std::vector<size_t> Bvh<T>::PossibleClosest(Fc closest, Ff furthest) {
         search_t left{closest((*non_leaf).node.get().left_->Box()), furthest((*non_leaf).node.get().left_->Box()), *(*non_leaf).node.get().left_};
         search_t right{closest((*non_leaf).node.get().right_->Box()), furthest((*non_leaf).node.get().right_->Box()), *(*non_leaf).node.get().right_};
         nodes.erase(non_leaf);
+        nodes.push_back(left);
+        nodes.push_back(right);
 
         closest_furthest = std::min(closest_furthest, std::min(left.far, right.far));
         nodes.erase(std::remove_if(nodes.begin(),
