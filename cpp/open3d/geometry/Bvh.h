@@ -318,7 +318,7 @@ public:
     /// might intersect given some test function
     /// \param fn a std::function which tests bounding boxes to see if they
     /// intersect
-    /// \return a vector of indicies contained by nodes which intersect with the
+    /// \return a vector of indices contained by nodes which intersect with the
     /// test function
 
     /// \brief Check the BVH for the indices of all possible primitives that

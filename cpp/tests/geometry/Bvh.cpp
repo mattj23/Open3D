@@ -26,6 +26,7 @@
 
 #include "open3d/geometry/Bvh.h"
 
+#include "open3d/geometry/Line3D.h"
 #include "tests/UnitTest.h"
 
 using namespace open3d::geometry;
@@ -34,6 +35,9 @@ using namespace ::testing;
 
 using AABB = AxisAlignedBoundingBox;
 using BoxVec = std::vector<AABB>;
+
+using v_t = Eigen::Vector3d;
+using intr_t = std::tuple<v_t, v_t, std::vector<size_t>>;
 
 AABB ShiftBox(Eigen::Index cardinal, double amount) {
     Vector3d v;
@@ -271,7 +275,50 @@ TEST(Bvh, CreateTopDown) {
     ExpectEQ(expected_box.min_bound_, bvh->Root().Box().min_bound_);
 }
 
-TEST(Bvh, PossibleIntersections) { EXPECT_TRUE(false); }
+/*
+ * Possible intersection tests
+ * This parameterized test uses the Ray3D intersection test to exercise the
+ * traversal method and check that potential intersections are correctly
+ * pruned by the hierarchy.
+ */
+class BvhIntersectionTests : public TestWithParam<intr_t> {};
+
+TEST_P(BvhIntersectionTests, PossibleIntersections) {
+    Ray3D ray{std::get<0>(GetParam()), std::get<1>(GetParam())};
+    auto expected = std::get<2>(GetParam());
+
+    auto spheres = std::make_shared<Spheres>();
+    spheres->emplace_back(Sphere{{5, 0, 0}, 1});
+    spheres->emplace_back(Sphere{{6, 0, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 7, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 9, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 0, 8}, 1});
+    spheres->emplace_back(Sphere{{0, 0, 6}, 1});
+
+    // Create the BVH
+    auto bvh = Bvh<Sphere>::CreateTopDown(
+            [](const Sphere& sphere) { return sphere.GetBox(); }, spheres,
+            bvh::SplitOptions::None());
+
+    // Find the possible intersections
+    auto results = bvh->PossibleIntersections(
+            [&ray](const AABB& bx) { return ray.SlabAABB(bx).has_value(); });
+
+    // Verify that the possible intersections contain the expected indices
+    EXPECT_EQ(expected.size(), results.size());
+    for (auto i : expected) {
+        EXPECT_TRUE(std::find(results.begin(), results.end(), i) !=
+                    results.end());
+    }
+}
+
+INSTANTIATE_TEST_CASE_P(Tests,
+                        BvhIntersectionTests,
+                        Values(intr_t{{0, 0, 0}, {1, 0, 0}, {0, 1}},
+                               intr_t{{0, 0, 0}, {0, 0, 1}, {5, 4}},
+                               intr_t{{0, 0, 0}, {0, 1, 0}, {2, 3}},
+                               intr_t{{6, 0, 0}, {-6, 0, 7}, {0, 1, 4, 5}},
+                               intr_t{{0, 9, 0}, {0, -9, 7}, {2, 3, 4, 5}}));
 
 }  // namespace tests
 }  // namespace open3d
