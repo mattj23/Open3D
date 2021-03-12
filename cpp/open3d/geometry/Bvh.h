@@ -46,10 +46,24 @@ using BoxVec = std::vector<AxisAlignedBoundingBox>;
 /// \brief This is a set of options which sets the behavior of top-down node
 /// splitting operations during BVH construction.
 struct SplitOptions {
+    /// \brief A node must contain more than this amount of primitives in order
+    /// to be considered for splitting. Note that a node may end up with less
+    /// than this number of primitives as a result of a split (for example if
+    /// min_primitives is 2, a node with 3 will split to create a child with 1).
+    /// If this is left empty, the default size is 1.
     utility::optional<size_t> min_primitives;
+
+    /// \brief A maximum acceptable child volume ratio to produce a split. For
+    /// example, if a node contains two identically sized, overlapping
+    /// primitives, splitting them into separate nodes will produce two children
+    /// whose combined volume is now 2.0 x the original node volume. In general
+    /// the smaller the ratio of the child volumes to the parent volume the
+    /// better the split, with the worst possible case being 2.0. Set this value
+    /// to specify a maximum permissible ratio, above which the split will not
+    /// occur.
     utility::optional<double> volume_ratio;
 
-    /// \brief Return an empty option set, such that the splitting algorithim
+    /// \brief Return an empty option set, such that the splitting algorithm
     /// will perform its default behavior.
     static SplitOptions None() { return {{}, {}}; }
 };

@@ -231,7 +231,45 @@ TEST(BvhNode, SplitLeafCardinalX) {
     EXPECT_EQ(node.right_->indices_.size(), 2);
 }
 
-TEST(Bvh, CreateTopDown) { EXPECT_TRUE(false); }
+TEST(Bvh, CreateTopDown) {
+    auto spheres = std::make_shared<Spheres>();
+    spheres->emplace_back(Sphere{{5, 0, 0}, 1});
+    spheres->emplace_back(Sphere{{6, 1, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 7, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 9, 0}, 1});
+    spheres->emplace_back(Sphere{{0, 0, 8}, 1});
+    spheres->emplace_back(Sphere{{0, 0, 6}, 1});
+
+    // Create the BVH
+    auto bvh = Bvh<Sphere>::CreateTopDown(
+            [](const Sphere& sphere) { return sphere.GetBox(); }, spheres,
+            bvh::SplitOptions::None());
+
+    // Find the accumulated bounding box
+    AABB expected_box{};
+    for (const auto& s : *spheres) expected_box += s.GetBox();
+
+    // Traverse the hierarchy to gather information about the nodes and
+    // primitives
+    size_t total_primitives = 0;
+    size_t leaf_nodes = 0;
+    std::function<void(const bvh::BvhNode<Sphere>&)> recurse;
+    recurse = [&](const bvh::BvhNode<Sphere>& n) {
+        if (n.IsLeaf()) {
+            total_primitives += n.indices_.size();
+            leaf_nodes++;
+        } else {
+            recurse(*n.left_);
+            recurse(*n.right_);
+        }
+    };
+    recurse(bvh->Root());
+
+    EXPECT_EQ(6, total_primitives);
+    EXPECT_EQ(6, leaf_nodes);
+    ExpectEQ(expected_box.max_bound_, bvh->Root().Box().max_bound_);
+    ExpectEQ(expected_box.min_bound_, bvh->Root().Box().min_bound_);
+}
 
 TEST(Bvh, PossibleIntersections) { EXPECT_TRUE(false); }
 
