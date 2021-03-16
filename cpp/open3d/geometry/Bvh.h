@@ -86,7 +86,6 @@ struct SplitOptions {
 /// that contain multiple primitives, which can become more efficient in cases
 /// where the additional layers of bounding box checks near leaves can be more
 /// work than simply checking multiple primitives. \tparam T
-template <class T>
 class BvhNode {
 public:
     /// \brief Get a reference to the axis aligned bounding box for this node
@@ -96,18 +95,19 @@ public:
     /// the node is a leaf node, this will be the sum of the bounding boxes of
     /// all of the contained primitives. If it is not a leaf node, this box
     /// will be the sum of its left and right child boxes.
-    void SetBox(const BoxVec& boxes);
+    template <class Fn>
+    void SetBox(Fn box_func);
 
     /// \brief Returns whether or not this node is a leaf node
     bool IsLeaf() const { return left_ == nullptr; }
 
     /// \brief A pointer to the left child of the node. Will be nullptr if this
     /// node is a leaf node.
-    std::unique_ptr<BvhNode<T>> left_;
+    std::unique_ptr<BvhNode> left_;
 
     /// \brief A pointer to the right child of the node. Will be nullptr if this
     /// node is a leaf node.
-    std::unique_ptr<BvhNode<T>> right_;
+    std::unique_ptr<BvhNode> right_;
 
     /// \brief A vector containing the indices of the primitives contained
     /// within this node. The indices refer to positions in the vector of
@@ -131,8 +131,9 @@ public:
     /// Bvh's primitives vector
     /// \param options a SplitOptions struct which will set the behavior for the
     /// splitting operation
-    static void SplitLeafObjMean(BvhNode<T>& node,
-                                 const BoxVec& boxes,
+    template <class Fn>
+    static void SplitLeafObjMean(BvhNode& node,
+                                 Fn box_func,
                                  const SplitOptions& options);
 
 private:
@@ -145,9 +146,9 @@ private:
     AxisAlignedBoundingBox box_;
 };
 
-template <class T>
-void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node,
-                                  const BoxVec& boxes,
+template <class Fn>
+void BvhNode::SplitLeafObjMean(BvhNode& node,
+                                  Fn box_func,
                                   const SplitOptions& options) {
     /* This is an operation used in the top-down construction of a BVH and
      * involves finding the longest cardinal direction of the node, splitting it
@@ -174,8 +175,8 @@ void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node,
         // in it, and that is to simply move one element into each of the
         // children, there is no need to perform the complex splitting
         // operation.
-        node.left_ = std::make_unique<BvhNode<T>>();
-        node.right_ = std::make_unique<BvhNode<T>>();
+        node.left_ = std::make_unique<BvhNode>();
+        node.right_ = std::make_unique<BvhNode>();
         node.left_->indices_.push_back(node.indices_.front());
         node.right_->indices_.push_back(node.indices_.back());
 
@@ -200,16 +201,16 @@ void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node,
         // direction
         double sum = 0;
         for (auto i : node.indices_) {
-            sum += boxes[i].GetCenter()[cardinal];
+            sum += box_func(i).GetCenter()[cardinal];
         }
-        auto split = sum / node.indices_.size();
+        auto split = sum / static_cast<double>(node.indices_.size());
 
         // Now we can create the two child nodes and push the indices of the
         // primitives contained by this node into the appropriate child node.
-        node.left_ = std::make_unique<BvhNode<T>>();
-        node.right_ = std::make_unique<BvhNode<T>>();
+        node.left_ = std::make_unique<BvhNode>();
+        node.right_ = std::make_unique<BvhNode>();
         for (auto i : node.indices_) {
-            if (boxes[i].GetCenter()[cardinal] < split) {
+            if (box_func(i).GetCenter()[cardinal] < split) {
                 node.left_->indices_.push_back(i);
             } else {
                 node.right_->indices_.push_back(i);
@@ -220,8 +221,8 @@ void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node,
     // At this point we have not finalized the split; the indices of the
     // primitives exist in both the parent node and the child nodes. Here we
     // can check for conditions that would make us want to abandon the split.
-    node.left_->SetBox(boxes);
-    node.right_->SetBox(boxes);
+    node.left_->SetBox(box_func);
+    node.right_->SetBox(box_func);
 
     // Check by how much the volume has changed as a fraction of the original
     // volume. For instance, if two identically sized primitives were both
@@ -242,19 +243,19 @@ void BvhNode<T>::SplitLeafObjMean(BvhNode<T>& node,
     // Finalize the split by clearing the local indices and recursively
     // splitting the child nodes.
     node.indices_.clear();
-    BvhNode<T>::SplitLeafObjMean(*node.left_, boxes, options);
-    BvhNode<T>::SplitLeafObjMean(*node.right_, boxes, options);
+    BvhNode::SplitLeafObjMean(*node.left_, box_func, options);
+    BvhNode::SplitLeafObjMean(*node.right_, box_func, options);
 }
 
-template <class T>
-void BvhNode<T>::SetBox(const BoxVec& boxes) {
+template <class Fn>
+void BvhNode::SetBox(Fn box_func) {
     box_.Clear();
     if (!IsLeaf()) {
         box_ += left_->Box();
         box_ += right_->Box();
     } else {
         for (auto i : indices_) {
-            box_ += boxes[i];
+            box_ += box_func(i);
         }
     }
 }
@@ -301,18 +302,13 @@ void BvhNode<T>::SetBox(const BoxVec& boxes) {
 /// have no way of knowing, but will no longer accurately represent the
 /// underlying data is was constructed for.
 /// \tparam T the primitive type contained by the BVH
-template <class T>
 class Bvh {
-    using Node = bvh::BvhNode<T>;
-    using Container = std::shared_ptr<std::vector<T>>;
-
 public:
-    explicit Bvh<T>(Container primitives) { primitives_ = primitives; };
 
     /// \brief Get a const reference to the root node. Use this for short lived
     /// access to the root node if needed; it does not confer shared ownership.
     /// \return
-    const Node& Root() const { return *root_; }
+    const bvh::BvhNode& Root() const { return *root_; }
 
     /// \brief Check the BVH for the indices of all possible primitives that
     /// might intersect given some test function
@@ -357,22 +353,16 @@ public:
     /// criteria for the top-down recursive splitting
     /// \return a constructed bounding volume hierarchy for type T
     template <class F>
-    static std::unique_ptr<Bvh<T>> CreateTopDown(
-            F box_fn, Container primitives, const bvh::SplitOptions& options);
+    static std::unique_ptr<Bvh> CreateTopDown(F box_fn, size_t primitive_count, const bvh::SplitOptions& options);
 
 private:
-    std::unique_ptr<Node> root_;
-
-    Container primitives_;
-    std::vector<AxisAlignedBoundingBox> boxes_;
+    std::unique_ptr<bvh::BvhNode> root_;
 };
 
-template <class T>
 template <class F>
-std::vector<size_t> Bvh<T>::PossibleIntersections(F fn) {
-    using Node = bvh::BvhNode<T>;
+std::vector<size_t> Bvh::PossibleIntersections(F fn) {
     std::vector<size_t> indices;
-    std::vector<std::reference_wrapper<Node>> nodes{*root_};
+    std::vector<std::reference_wrapper<bvh::BvhNode>> nodes{*root_};
 
     while (!nodes.empty()) {
         auto working = nodes.back();
@@ -385,17 +375,16 @@ std::vector<size_t> Bvh<T>::PossibleIntersections(F fn) {
                 indices.push_back(i);
             }
         } else {
-            nodes.push_back(*working.get().left_);
-            nodes.push_back(*working.get().right_);
+            nodes.emplace_back(*working.get().left_);
+            nodes.emplace_back(*working.get().right_);
         }
     }
 
     return indices;
 }
 
-template <class T>
 template <class Fc, class Ff>
-std::vector<size_t> Bvh<T>::PossibleClosest(Fc closest, Ff furthest) {
+std::vector<size_t> Bvh::PossibleClosest(Fc closest, Ff furthest) {
     /*
      * Closest distance pruning
      *
@@ -406,7 +395,6 @@ std::vector<size_t> Bvh<T>::PossibleClosest(Fc closest, Ff furthest) {
      * anything closer to the entity than the box which produced the
      * threshold.
      */
-    using Node = bvh::BvhNode<T>;
     using std::find_if;
     using std::min;
     using std::remove_if;
@@ -414,7 +402,7 @@ std::vector<size_t> Bvh<T>::PossibleClosest(Fc closest, Ff furthest) {
     struct search_t {
         double close;
         double far;
-        std::reference_wrapper<Node> node;
+        std::reference_wrapper<bvh::BvhNode> node;
     };
 
     std::vector<search_t> nodes{
@@ -457,33 +445,22 @@ std::vector<size_t> Bvh<T>::PossibleClosest(Fc closest, Ff furthest) {
     return indices;
 }
 
-template <class T>
 template <class F>
-std::unique_ptr<Bvh<T>> Bvh<T>::CreateTopDown(
-        F box_fn, Container primitives, const bvh::SplitOptions& options) {
+std::unique_ptr<Bvh> Bvh::CreateTopDown(F box_fn, size_t primitive_count, const bvh::SplitOptions& options) {
     // Create the BVH and reserve memory for the indices
-    auto bvh = std::make_unique<Bvh<T>>(primitives);
-    bvh->root_ = std::make_unique<Node>();
-    bvh->root_->indices_.reserve(primitives->size());
+    auto bvh = std::make_unique<Bvh>();
+    bvh->root_ = std::make_unique<bvh::BvhNode>();
 
-    // Create the vector of bounding box objects. Indices are common between the
-    // bounding boxes and the primitives such that boxes[i] is the bounding box
-    // for the object in primitives[i]. The boxes are generated by the function
-    // type F argument box_fn, which must take a primitive of type T and return
-    // an axis aligned bounding box
-    std::vector<AxisAlignedBoundingBox> boxes;
-    boxes.reserve(primitives->size());
-
-    for (size_t i = 0; i < primitives->size(); ++i) {
+    bvh->root_->indices_.reserve(primitive_count);
+    for (size_t i = 0; i < primitive_count; ++i) {
         bvh->root_->indices_.push_back(i);
-        boxes.push_back(box_fn((*primitives)[i]));
     }
 
     // At this point the root node contains all primitives. We compute the
     // bounding box for the root node from its contained primitives and then
     // begin the recursive splitting algorithm.
-    bvh->root_->SetBox(boxes);
-    bvh::BvhNode<T>::SplitLeafObjMean(*bvh->root_, boxes, options);
+    bvh->root_->SetBox(box_fn);
+    bvh::BvhNode::SplitLeafObjMean(*bvh->root_, box_fn, options);
 
     return bvh;
 }
