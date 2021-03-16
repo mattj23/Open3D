@@ -39,8 +39,61 @@
 namespace open3d {
 namespace geometry {
 
+/// \class Bvh
+///
+/// \brief This is a general purpose Bounding Volume Hierarchy for
+/// non-specialized intersection and collision testing. This class should be
+/// used as a foundation for implementing a BVH for a concrete type, which
+/// should either inherit from or wrap this type.  This is not meant to be used
+/// directly.
+///
+/// The underlying primitives which are being partitioned by this BVH need to
+/// be accessible by an index of size_t, and they must be contiguous from 0 to
+/// a max value.  These indices will be the common reference to primitives
+/// between this object and its calling code.
+///
+/// \summary This class does not directly store or reference any primitives, nor
+/// does it care how the axis aligned bounding boxes which represent the bounds
+/// of the underlying primitives are stored and/or calculated. Internally, this
+/// BVH implementation only ever refers to indices of primitives which are
+/// represented by a size_t and in a contiguous range. While this conceptually
+/// maps to an array or a std::vector, there is no requirement that it be
+/// implemented as sucn. The calling code must provide function template
+/// parameters which the BVH will use to retrieve bounding boxes for primitives
+/// by their size_t index.
+///
+/// This is to allow for flexibility in an implementation for a concrete type,
+/// in that the author can decide if bounding volumes are precomputed or stored,
+/// if they're maintained separately from primitives or if they're accessed
+/// directly as a property of the primitive, etc.
+///
+/// Additionally, intersection and distance tests work the same way, using a
+/// template function to provide the interface for computing the interaction of
+/// the AABBs with any sort of test geometry. Indices for the candidate
+/// primitives are returned.
+///
+/// \details This BVH implementation is meant to be a general purpose building
+/// block for creating bounding volume hierarchies for concrete types. It was
+/// designed with a few overall objectives:
+///     1. Be general enough to handle user implemented types
+///     2. Be performance conscious; avoid major inefficiencies but not at the
+///         cost of ceasing to be generalizable
+///     3. Be easy to use, but only with minor performance concessions
+///
+/// To that end this BVH is generally suitable for geometric operations like
+/// intersection tests, measurements, and basic collision pruning in simple
+/// graphics and scientific applications, where it will perform many orders of
+/// magnitude faster than exhaustive checking.  And though it will perform
+/// reasonably well for ray/line intersections you should not expect to see
+/// performance on par with highly optimized parallel/SIMD implementations like
+/// Embree.
+///
+/// The implementation consists of a binary hierarchy of BvhNode objects,
+/// owned exclusively by the Bvh object itself through the use of
+/// std::unique_ptr.
+class Bvh;
+
 namespace bvh {
-using BoxVec = std::vector<AxisAlignedBoundingBox>;
 
 /// \struct SplitOptions
 /// \brief This is a set of options which sets the behavior of top-down node
@@ -72,10 +125,10 @@ struct SplitOptions {
 ///
 /// This is a singular node in a binary bounding volume hierarchy which contains
 /// a unique pointer to both a left and right child node. Each node contains a
-/// vector of indices, which refer to the element position of primitives in the
-/// container vector used during construction of the BVH. The indices contained
-/// in this node are refer to the specific primitives which are contained within
-/// the bounding box of this specific node.
+/// vector of indices, which refer to the element position of primitives
+/// provided by the client code during construction of the BVH. The indices
+/// contained in this node refer to the specific primitives which are contained
+/// within the bounding box of this particular node.
 ///
 /// A node may *either* have child nodes *or* have child indices, it may not
 /// have both. Nodes with indices are leaf nodes.  Nodes without will have
@@ -85,7 +138,7 @@ struct SplitOptions {
 /// correspondence between a node and a primitive. What this allows is for nodes
 /// that contain multiple primitives, which can become more efficient in cases
 /// where the additional layers of bounding box checks near leaves can be more
-/// work than simply checking multiple primitives. \tparam T
+/// work than simply checking multiple primitives.
 class BvhNode {
 public:
     /// \brief Get a reference to the axis aligned bounding box for this node
@@ -94,7 +147,9 @@ public:
     /// \brief Set the bounding box of the node based on its internal state. If
     /// the node is a leaf node, this will be the sum of the bounding boxes of
     /// all of the contained primitives. If it is not a leaf node, this box
-    /// will be the sum of its left and right child boxes.
+    /// will be the sum of its left and right child boxes. The provided function
+    /// must take a size_t and return the AxisAlignedBoundingBox of the
+    /// primitive with that index.
     template <class Fn>
     void SetBox(Fn box_func);
 
@@ -110,8 +165,8 @@ public:
     std::unique_ptr<BvhNode> right_;
 
     /// \brief A vector containing the indices of the primitives contained
-    /// within this node. The indices refer to positions in the vector of
-    /// original primitives used to create the BVH.
+    /// within this node. The indices refer to positions in the contiguous range
+    /// of original primitives used to create the BVH.
     std::vector<size_t> indices_;
 
     /// \brief Splits a leaf node along the longest dimension of the bounding
@@ -125,19 +180,17 @@ public:
     ///
     /// This method will no-op on nodes which are not leaves (and thus do not
     /// have child primitives)
-    /// \param node a temporary reference to a BvhNode<T> to be split
-    /// \param boxes the std::vector of all bounding boxes where each element
-    /// i is the bounding box associated with the primitive with index i in the
-    /// Bvh's primitives vector
-    /// \param options a SplitOptions struct which will set the behavior for the
-    /// splitting operation
+    /// \param node a temporary reference to a BvhNode to be split
+    /// \param box_fn a function which takes a size_t and returns the bounding
+    /// box for the primitive with that index \param options a SplitOptions
+    /// struct which will set the behavior for the splitting operation
     template <class Fn>
     static void SplitLeafObjMean(BvhNode& node,
                                  Fn box_func,
                                  const SplitOptions& options);
 
 private:
-    /// Each BvhNode<T> has a bounding box associated with it, such that all of
+    /// Each BvhNode has a bounding box associated with it, such that all of
     /// the combined primitives contained by all of the leaf nodes which are
     /// descendants of this node are contained within this box. In the case of
     /// a leaf node, this box is simply the sum of the bounding boxes for the
@@ -148,8 +201,8 @@ private:
 
 template <class Fn>
 void BvhNode::SplitLeafObjMean(BvhNode& node,
-                                  Fn box_func,
-                                  const SplitOptions& options) {
+                               Fn box_func,
+                               const SplitOptions& options) {
     /* This is an operation used in the top-down construction of a BVH and
      * involves finding the longest cardinal direction of the node, splitting it
      * in half, and then transferring the primitives into one node or the other
@@ -262,60 +315,12 @@ void BvhNode::SetBox(Fn box_func) {
 
 }  // namespace bvh
 
-/// \class Bvh
-///
-/// \summary This is a general purpose Bounding Volume Hierarchy for
-/// non-specialized intersection and collision testing. It uses a template to
-/// allow for user defined primitives; the only requirements are that the user
-/// provide a function capable of retrieving an AxisAlignedBoundingBox from a
-/// primitive and that the user supplies a shared_ptr to a std::vector
-/// containing the primitives to be mapped. Use this template class as a
-/// foundation to create BVHs for different concrete types.
-///
-/// \details This BVH implementation is meant to be a general purpose building
-/// block for creating bounding volume hierarchies for concrete types. It was
-/// designed with a few overall objectives:
-///     1. Be general enough to handle user implemented types
-///     2. Be performance conscious; avoid major inefficiencies but not at the
-///         cost of ceasing to be generalizable
-///     3. Be easy to use, but only with minor performance concessions
-///
-/// To that end this BVH is generally suitable for geometric operations like
-/// intersection tests, measurements, and basic collision pruning in simple
-/// graphics and scientific applications, where it will perform many orders of
-/// magnitude faster than exhaustive checking.  And though it will perform
-/// reasonably well for ray/line intersections you should not expect to see
-/// performance on par with highly optimized parallel/SIMD implementations like
-/// Embree.
-///
-/// The implementation consists of a binary hierarchy of BvhNode<T> objects,
-/// owned exclusively by the Bvh<T> object itself through the use of
-/// std::unique_ptr. It also requires a std::shared_ptr to a std::vector of
-/// the primitive type T. This type T is immaterial except that it must be
-/// convertible to an AxisAlignedBoundingBox by a function provided to the
-/// creation.
-///
-/// The std::shared_ptr to the vector of primitives *implies shared ownership*,
-/// in that the Bvh is meaningless without these primitives in the exact state
-/// and order that they were in when the Bvh was constructed. If the primitives
-/// or the containing vector is altered while the Bvh is extant, the Bvh will
-/// have no way of knowing, but will no longer accurately represent the
-/// underlying data is was constructed for.
-/// \tparam T the primitive type contained by the BVH
 class Bvh {
 public:
-
     /// \brief Get a const reference to the root node. Use this for short lived
     /// access to the root node if needed; it does not confer shared ownership.
     /// \return
     const bvh::BvhNode& Root() const { return *root_; }
-
-    /// \brief Check the BVH for the indices of all possible primitives that
-    /// might intersect given some test function
-    /// \param fn a std::function which tests bounding boxes to see if they
-    /// intersect
-    /// \return a vector of indices contained by nodes which intersect with the
-    /// test function
 
     /// \brief Check the BVH for the indices of all possible primitives that
     /// might intersect given a predicate for checking bounding boxes. This
@@ -337,23 +342,55 @@ public:
     /// box and returns a bool
     /// \param fn a function which returns true if an axis aligned bounding box
     /// intersects.
-    /// \return
+    /// \return a std::vector of primitives contained in the boxes which matched
+    /// with the predicate
     template <class F>
     std::vector<size_t> PossibleIntersections(F fn);
 
+    /// \brief Check the BVH for the indices of all possible primitives that
+    /// might be or contain the closest geometry by some measure. This performs
+    /// a search which prunes nodes that cannot possibly contain the closest
+    /// geometry.
+    ///
+    /// \details This method takes two function types, one which returns a
+    /// closest distance to a bounding box, and one which returns a furthest
+    /// distance from a bounding box. The algorithm will descend breadth first
+    /// through the BVH using these functions on each node, maintaining track of
+    /// the smallest *farthest* distance to any node visited so far. Any node
+    /// which does not have a *closest* distance smaller than this global
+    /// *farthest* distance cannot possibly contain the closest geometry, nor
+    /// can any of its children. Thus enormous amounts of the hierarchy can be
+    /// pruned from the check, and only primitives which reside in a node which
+    /// cannot be ruled out will be returned.
+    ///
+    /// This method does not know or care what type of test geometry is wrapped
+    /// inside the two function types. If ultimately your goal is to measure
+    /// distances to the primitives from a point, then your functions must
+    /// return the closest and furthest distances between a point and an
+    /// AxisAlignedBoundingBox. If your goal is to measure distances to the
+    /// primitives from a line, then your functions must return the closest and
+    /// furthest distances between a *line* and an AxisAlignedBoundingBox.
+    /// Likewise with any other geometric construct. That is the only
+    /// constraint.
+    ///
+    /// \return a vector with the primitive indices which may contain the
+    /// closest distance
     template <class Fc, class Ff>
     std::vector<size_t> PossibleClosest(Fc closest, Ff furthest);
 
     /// \brief A simple top-down construction method that builds a BVH
     ///
-    /// \param to_box a function to take a primitive of type T and return the
-    /// axis aligned bounding box which encloses it
-    /// \param primitives a shared_ptr to a vector<T> containing the primitives
+    /// \param box_fn a function to take a size_t index corresponding with a
+    /// primitive and return the axis aligned bounding box which encloses it
+    /// \param primitive_count the total number of primitives, which must form a
+    /// contiguous range from 0 to primitive_count - 1
     /// \param options a SplitOptions object which contains various optional
     /// criteria for the top-down recursive splitting
-    /// \return a constructed bounding volume hierarchy for type T
+    /// \return a constructed bounding volume hierarchy
     template <class F>
-    static std::unique_ptr<Bvh> CreateTopDown(F box_fn, size_t primitive_count, const bvh::SplitOptions& options);
+    static std::unique_ptr<Bvh> CreateTopDown(F box_fn,
+                                              size_t primitive_count,
+                                              const bvh::SplitOptions& options);
 
 private:
     std::unique_ptr<bvh::BvhNode> root_;
@@ -446,7 +483,9 @@ std::vector<size_t> Bvh::PossibleClosest(Fc closest, Ff furthest) {
 }
 
 template <class F>
-std::unique_ptr<Bvh> Bvh::CreateTopDown(F box_fn, size_t primitive_count, const bvh::SplitOptions& options) {
+std::unique_ptr<Bvh> Bvh::CreateTopDown(F box_fn,
+                                        size_t primitive_count,
+                                        const bvh::SplitOptions& options) {
     // Create the BVH and reserve memory for the indices
     auto bvh = std::make_unique<Bvh>();
     bvh->root_ = std::make_unique<bvh::BvhNode>();

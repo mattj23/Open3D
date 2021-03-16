@@ -67,8 +67,7 @@ struct Sphere {
 
 using Spheres = std::vector<Sphere>;
 
-std::unique_ptr<bvh::BvhNode> make_node_box(Vector3d min,
-                                                    Vector3d max) {
+std::unique_ptr<bvh::BvhNode> make_node_box(Vector3d min, Vector3d max) {
     BoxVec vec{{min, max}};
     auto node = std::make_unique<bvh::BvhNode>();
     node->indices_.push_back(0);
@@ -124,7 +123,8 @@ TEST(BvhNode, SplitNonLeafNoOp) {
     auto l = node.left_.get();
     auto r = node.right_.get();
 
-    bvh::BvhNode::SplitLeafObjMean(node, [&v](size_t i) { return v[i]; }, bvh::SplitOptions::None());
+    bvh::BvhNode::SplitLeafObjMean(
+            node, [&v](size_t i) { return v[i]; }, bvh::SplitOptions::None());
 
     EXPECT_EQ(l, node.left_.get());
     EXPECT_EQ(r, node.right_.get());
@@ -139,7 +139,8 @@ TEST(BvhNode, SplitLeafMinPrimitives) {
 
     bvh::SplitOptions options{};
     options.min_primitives = 2;
-    bvh::BvhNode::SplitLeafObjMean(node, [&v](size_t i) { return v[i]; }, options);
+    bvh::BvhNode::SplitLeafObjMean(
+            node, [&v](size_t i) { return v[i]; }, options);
 
     EXPECT_EQ(nullptr, node.left_);
     EXPECT_EQ(nullptr, node.right_);
@@ -152,7 +153,8 @@ TEST(BvhNode, SplitLeafTwoEntites) {
     node.indices_.push_back(1);
     node.SetBox([&v](size_t i) { return v[i]; });
 
-    bvh::BvhNode::SplitLeafObjMean(node, [&v](size_t i) { return v[i]; }, bvh::SplitOptions::None());
+    bvh::BvhNode::SplitLeafObjMean(
+            node, [&v](size_t i) { return v[i]; }, bvh::SplitOptions::None());
 
     EXPECT_FALSE(node.IsLeaf());
     EXPECT_EQ(node.left_->indices_.size(), 1);
@@ -173,7 +175,8 @@ TEST(BvhNode, VolumeAbort) {
 
     bvh::SplitOptions options{};
     options.volume_ratio = 1.5;
-    bvh::BvhNode::SplitLeafObjMean(node, [&v](size_t i) { return v[i]; }, options);
+    bvh::BvhNode::SplitLeafObjMean(
+            node, [&v](size_t i) { return v[i]; }, options);
 
     EXPECT_EQ(nullptr, node.left_);
     EXPECT_EQ(nullptr, node.right_);
@@ -188,7 +191,8 @@ TEST(BvhNode, VolumeOk) {
 
     bvh::SplitOptions options{};
     options.volume_ratio = 1.95;
-    bvh::BvhNode::SplitLeafObjMean(node, [&v](size_t i) { return v[i]; }, options);
+    bvh::BvhNode::SplitLeafObjMean(
+            node, [&v](size_t i) { return v[i]; }, options);
 
     EXPECT_FALSE(node.IsLeaf());
 }
@@ -201,7 +205,8 @@ TEST(BvhNode, SplitLeafCardinalY) {
 
     bvh::SplitOptions options;
     options.min_primitives = 2;  // Need this or it will further split right
-    bvh::BvhNode::SplitLeafObjMean(node, [&v](size_t i) { return v[i]; }, options);
+    bvh::BvhNode::SplitLeafObjMean(
+            node, [&v](size_t i) { return v[i]; }, options);
 
     EXPECT_EQ(node.left_->indices_.size(), 1);
     EXPECT_EQ(node.right_->indices_.size(), 2);
@@ -215,7 +220,8 @@ TEST(BvhNode, SplitLeafCardinalZ) {
 
     bvh::SplitOptions options;
     options.min_primitives = 2;  // Need this or it will further split right
-    bvh::BvhNode::SplitLeafObjMean(node, [&v](size_t i) { return v[i]; }, options);
+    bvh::BvhNode::SplitLeafObjMean(
+            node, [&v](size_t i) { return v[i]; }, options);
 
     EXPECT_EQ(node.left_->indices_.size(), 1);
     EXPECT_EQ(node.right_->indices_.size(), 2);
@@ -229,27 +235,22 @@ TEST(BvhNode, SplitLeafCardinalX) {
 
     bvh::SplitOptions options;
     options.min_primitives = 2;  // Need this or it will further split right
-    bvh::BvhNode::SplitLeafObjMean(node, [&v](size_t i) { return v[i]; }, options);
+    bvh::BvhNode::SplitLeafObjMean(
+            node, [&v](size_t i) { return v[i]; }, options);
 
     EXPECT_EQ(node.left_->indices_.size(), 1);
     EXPECT_EQ(node.right_->indices_.size(), 2);
 }
 
 TEST(Bvh, CreateTopDown) {
-    Spheres spheres {
-        Sphere{{5, 0, 0}, 1},
-        Sphere{{6, 1, 0}, 1},
-        Sphere{{0, 7, 0}, 1},
-        Sphere{{0, 9, 0}, 1},
-        Sphere{{0, 0, 8}, 1},
-        Sphere{{0, 0, 6}, 1},
+    Spheres spheres{
+            Sphere{{5, 0, 0}, 1}, Sphere{{6, 1, 0}, 1}, Sphere{{0, 7, 0}, 1},
+            Sphere{{0, 9, 0}, 1}, Sphere{{0, 0, 8}, 1}, Sphere{{0, 0, 6}, 1},
     };
 
     // Create the BVH
-    auto bvh = Bvh::CreateTopDown(
-            [&](size_t i) { return spheres[i].GetBox(); },
-            spheres.size(),
-            bvh::SplitOptions::None());
+    auto bvh = Bvh::CreateTopDown([&](size_t i) { return spheres[i].GetBox(); },
+                                  spheres.size(), bvh::SplitOptions::None());
 
     // Find the accumulated bounding box
     AABB expected_box{};
@@ -289,20 +290,13 @@ TEST_P(BvhIntersectionTests, PossibleIntersections) {
     Ray3D ray{std::get<0>(GetParam()), std::get<1>(GetParam())};
     auto expected = std::get<2>(GetParam());
 
-    Spheres spheres {
-        Sphere{{5, 0, 0}, 1},
-        Sphere{{6, 0, 0}, 1},
-        Sphere{{0, 7, 0}, 1},
-        Sphere{{0, 9, 0}, 1},
-        Sphere{{0, 0, 8}, 1},
-        Sphere{{0, 0, 6}, 1}
-    };
+    Spheres spheres{Sphere{{5, 0, 0}, 1}, Sphere{{6, 0, 0}, 1},
+                    Sphere{{0, 7, 0}, 1}, Sphere{{0, 9, 0}, 1},
+                    Sphere{{0, 0, 8}, 1}, Sphere{{0, 0, 6}, 1}};
 
     // Create the BVH
-    auto bvh = Bvh::CreateTopDown(
-            [&](size_t i) { return spheres[i].GetBox(); },
-            spheres.size(),
-            bvh::SplitOptions::None());
+    auto bvh = Bvh::CreateTopDown([&](size_t i) { return spheres[i].GetBox(); },
+                                  spheres.size(), bvh::SplitOptions::None());
 
     // Find the possible intersections
     auto results = bvh->PossibleIntersections(
@@ -353,18 +347,13 @@ TEST(BvhDistanceTests, TraverseClosest) {
         return dist;
     };
 
-    Spheres spheres{Sphere{{5, 0, 0}, 1},
-    Sphere{{6, 0, 0}, 1},
-    Sphere{{0, 7, 0}, 1},
-    Sphere{{0, 9, 0}, 1},
-    Sphere{{0, 0, 8}, 1},
-    Sphere{{0, 0, 6}, 1}};
+    Spheres spheres{Sphere{{5, 0, 0}, 1}, Sphere{{6, 0, 0}, 1},
+                    Sphere{{0, 7, 0}, 1}, Sphere{{0, 9, 0}, 1},
+                    Sphere{{0, 0, 8}, 1}, Sphere{{0, 0, 6}, 1}};
 
     // Create the BVH
-    auto bvh = Bvh::CreateTopDown(
-            [&](size_t i) { return spheres[i].GetBox(); },
-            spheres.size(),
-            bvh::SplitOptions::None());
+    auto bvh = Bvh::CreateTopDown([&](size_t i) { return spheres[i].GetBox(); },
+                                  spheres.size(), bvh::SplitOptions::None());
 
     auto results = bvh->PossibleClosest(closest, furthest);
 }
