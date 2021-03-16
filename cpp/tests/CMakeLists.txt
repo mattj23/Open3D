@@ -41,6 +41,7 @@ set(UNIT_TEST_SOURCE_FILES
     geometry/EstimateNormals.cpp
     geometry/Line3D.cpp
     geometry/TriangleBounds.cpp
+    geometry/TriangleMeshBvh.cpp
     geometry/Octree.cpp
     geometry/HalfEdgeTriangleMesh.cpp
     geometry/AccumulatedPoint.cpp

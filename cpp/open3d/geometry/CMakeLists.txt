@@ -1,6 +1,6 @@
 # build
 set(ALL_SOURCE_FILES
-    Bvh.cpp
+        Bvh.h   # Remove later
     BoundingVolume.cpp
     EstimateNormals.cpp
     Geometry3D.cpp
@@ -29,6 +29,7 @@ set(ALL_SOURCE_FILES
     TetraMeshFactory.cpp
     TriangleBounds.cpp
     TriangleMesh.cpp
+    TriangleMeshBvh.cpp
     TriangleMeshDeformation.cpp
     TriangleMeshFactory.cpp
     TriangleMeshSimplification.cpp
