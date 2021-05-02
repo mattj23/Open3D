@@ -99,6 +99,43 @@ public:
     /// SlabAABB and ExactAABB methods for further information.
     bool HasIntersectionWith(const Line3D& line, bool exact = false) const;
 
+    /// \brief Returns the lowest intersection parameter of a
+    /// Line3D/Ray3D/Segment3D with any triangle in the Bvh, or an empty
+    /// optional if no such intersection exists. The lower a parameter value is
+    /// the further back in the direction of the line it lies, so the lowest
+    /// intersection parameter on a Ray3D or a Segment3D the closer it is to the
+    /// line origin. You can use this to determine the first point intersected
+    /// by a ray or a segment.
+    /// \param line A Line3D/Ray3D/Segment3D to perform the intersections with
+    /// \param exact If true use the exact intersection method with the AABB,
+    /// otherwise uses the branchless slab method. See the Line3D class'
+    /// SlabAABB and ExactAABB methods for further information.
+    utility::optional<double> LowestIntersectionParameter(
+            const Line3D& line, bool exact = false) const;
+
+    /// \brief Returns the intersection point with the lowest line parameter of
+    /// a Line3D/Ray3D/Segment3D with any triangle in the Bvh, or an empty
+    /// optional if no such intersection exists. The lower a parameter value is
+    /// the further back in the direction of the line it lies, so the lowest
+    /// intersection parameter on a Ray3D or a Segment3D the closer it is to the
+    /// line origin. You can use this to determine the first point intersected
+    /// by a ray or a segment.
+    /// \param line A Line3D/Ray3D/Segment3D to perform the intersections with
+    /// \param exact If true use the exact intersection method with the AABB,
+    /// otherwise uses the branchless slab method. See the Line3D class'
+    /// SlabAABB and ExactAABB methods for further information.
+    utility::optional<Eigen::Vector3d> LowestIntersection(
+            const Line3D& line, bool exact = false) const;
+
+    /// \brief Returns all intersection parameters of a Line3D/Ray3D/Segment3D
+    /// with the triangles in the Bvh.
+    /// \param line A Line3D/Ray3D/Segment3D to perform the intersections with
+    /// \param exact If true use the exact intersection method with the AABB,
+    /// otherwise uses the branchless slab method. See the Line3D class'
+    /// SlabAABB and ExactAABB methods for further information.
+    std::vector<double> IntersectionParameters(const Line3D& line,
+                                               bool exact = false) const;
+
     /// \brief Returns all intersection points of a Line3D/Ray3D/Segment3D
     /// with the triangles in the Bvh.
     /// \param line A Line3D/Ray3D/Segment3D to perform the intersections with
@@ -113,15 +150,18 @@ public:
     /// \param point the test point
     Eigen::Vector3d ClosestPointTo(const Eigen::Vector3d& point) const;
 
-    /// \brief Return the furthest point on any triangle in the Bvh from a test
+    /// \brief Return the farthest point on any triangle in the Bvh from a test
     /// point.
     /// \param point the test point
-    Eigen::Vector3d FurthestPointFrom(const Eigen::Vector3d& point) const;
+    Eigen::Vector3d FarthestPointFrom(const Eigen::Vector3d& point) const;
 
 private:
     std::unique_ptr<Bvh> bvh_;
     std::vector<TriangleBounds> triangles_;
     std::vector<AxisAlignedBoundingBox> bounds_;
+
+    std::vector<size_t> LineIntersectionCandidates(const Line3D& line,
+                                                   bool exact) const;
 };
 }  // namespace geometry
 }  // namespace open3d

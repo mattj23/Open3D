@@ -47,14 +47,37 @@ TriangleMeshBvh TriangleMeshBvh::TopDown(const TriangleMesh& mesh,
     return bvh;
 }
 
+std::vector<double> TriangleMeshBvh::IntersectionParameters(const Line3D& line,
+                                                            bool exact) const {
+    std::vector<double> results;
+    auto candidates = LineIntersectionCandidates(line, exact);
+
+    for (auto c : candidates) {
+        auto result = triangles_[c].IntersectionParameter(line);
+        if (result.has_value()) results.push_back(result.value());
+    }
+}
+
+utility::optional<double> TriangleMeshBvh::LowestIntersectionParameter(
+        const Line3D& line, bool exact) const {
+    auto results = IntersectionParameters(line, exact);
+    if (results.empty()) return {};
+
+    return *std::min_element(results.begin(), results.end());
+}
+
+utility::optional<Eigen::Vector3d> TriangleMeshBvh::LowestIntersection(
+        const Line3D& line, bool exact) const {
+    auto result = LowestIntersectionParameter(line, exact);
+    if (!result.has_value()) return {};
+
+    return line.Line().pointAt(result.value());
+}
+
 std::vector<Eigen::Vector3d> TriangleMeshBvh::Intersections(const Line3D& line,
                                                             bool exact) const {
     std::vector<Eigen::Vector3d> results;
-    auto candidates = bvh_->PossibleIntersections(
-            [&line, exact](const AxisAlignedBoundingBox& box) {
-                return exact ? line.ExactAABB(box).has_value()
-                             : line.SlabAABB(box).has_value();
-            });
+    auto candidates = LineIntersectionCandidates(line, exact);
 
     for (auto c : candidates) {
         auto result = triangles_[c].Intersection(line);
@@ -64,11 +87,7 @@ std::vector<Eigen::Vector3d> TriangleMeshBvh::Intersections(const Line3D& line,
 
 bool TriangleMeshBvh::HasIntersectionWith(const Line3D& line,
                                           bool exact) const {
-    auto candidates = bvh_->PossibleIntersections(
-            [&line, exact](const AxisAlignedBoundingBox& box) {
-                return exact ? line.ExactAABB(box).has_value()
-                             : line.SlabAABB(box).has_value();
-            });
+    auto candidates = LineIntersectionCandidates(line, exact);
 
     for (auto c : candidates) {
         auto result = triangles_[c].Intersection(line);
@@ -84,5 +103,97 @@ bool TriangleMeshBvh::IsPointInside(const Eigen::Vector3d& point,
     return intersections.size() % 2 == 1;
 }
 
+std::vector<size_t> TriangleMeshBvh::LineIntersectionCandidates(
+        const Line3D& line, bool exact) const {
+    return bvh_->PossibleIntersections(
+            [&line, exact](const AxisAlignedBoundingBox& box) {
+                return exact ? line.ExactAABB(box).has_value()
+                             : line.SlabAABB(box).has_value();
+            });
+}
+
+Eigen::Vector3d TriangleMeshBvh::ClosestPointTo(
+        const Eigen::Vector3d& point) const {
+    using std::max;
+    using std::min;
+
+    auto closest = [&point](const AxisAlignedBoundingBox& box) {
+        // The closest point on the box is found by clamping the test point to
+        // the bounds
+        auto cx = max(min(point.x(), box.max_bound_.x()), box.min_bound_.x());
+        auto cy = max(min(point.y(), box.max_bound_.y()), box.min_bound_.y());
+        auto cz = max(min(point.z(), box.max_bound_.z()), box.min_bound_.z());
+        Eigen::Vector3d c{cx, cy, cz};
+        return (c - point).norm();
+    };
+
+    auto farthest = [&point](const AxisAlignedBoundingBox& box) {
+        // The farthest point on the AABB is always going to be one of the
+        // eight corners
+        double dist = 0;
+        for (const auto& p : box.GetBoxPoints()) {
+            dist = std::max((p - point).norm(), dist);
+        }
+        return dist;
+    };
+
+    auto candidates = bvh_->PossibleClosest(closest, farthest);
+    double closest_distance;
+    Eigen::Vector3d closest_point{};
+
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        auto cp = triangles_[i].ClosestPoint(point);
+        double d = (point - cp).norm();
+
+        if (i == 0 || d < closest_distance) {
+            closest_distance = d;
+            closest_point = cp;
+        }
+    }
+
+    return closest_point;
+}
+
+Eigen::Vector3d TriangleMeshBvh::FarthestPointFrom(
+        const Eigen::Vector3d& point) const {
+    using std::max;
+    using std::min;
+
+    auto closest = [&point](const AxisAlignedBoundingBox& box) {
+        // The closest point on the box is found by clamping the test point to
+        // the bounds
+        auto cx = max(min(point.x(), box.max_bound_.x()), box.min_bound_.x());
+        auto cy = max(min(point.y(), box.max_bound_.y()), box.min_bound_.y());
+        auto cz = max(min(point.z(), box.max_bound_.z()), box.min_bound_.z());
+        Eigen::Vector3d c{cx, cy, cz};
+        return (c - point).norm();
+    };
+
+    auto farthest = [&point](const AxisAlignedBoundingBox& box) {
+        // The farthest point on the AABB is always going to be one of the
+        // eight corners
+        double dist = 0;
+        for (const auto& p : box.GetBoxPoints()) {
+            dist = std::max((p - point).norm(), dist);
+        }
+        return dist;
+    };
+
+    auto candidates = bvh_->PossibleFarthest(closest, farthest);
+    double farthest_distance;
+    Eigen::Vector3d farthest_point{};
+
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        auto fp = triangles_[i].FarthestPoint(point);
+        double d = (point - fp).norm();
+
+        if (i == 0 || d > farthest_distance) {
+            farthest_distance = d;
+            farthest_point = fp;
+        }
+    }
+
+    return farthest_point;
+}
 }  // namespace geometry
 }  // namespace open3d

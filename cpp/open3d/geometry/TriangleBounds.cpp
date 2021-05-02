@@ -70,6 +70,22 @@ bool TriangleBounds::IsPointInTriangle(const Eigen::Vector3d& point) const {
     return !(t < 0.0 || (s + t) > 1.0);
 }
 
+utility::optional<double> TriangleBounds::IntersectionParameter(
+        const Line3D& line) const {
+    if (is_degenerate_ || IsParallelTo(line.Direction())) {
+        return {};
+    }
+
+    auto result = line.IntersectionParameter(plane_);
+    if (!result.has_value()) return {};
+
+    auto point = line.Line().pointAt(result.value());
+    if (IsPointInTriangle(point)) {
+        return result.value();
+    }
+    return {};
+}
+
 utility::optional<Eigen::Vector3d> TriangleBounds::Intersection(
         const Line3D& line) const {
     if (is_degenerate_ || IsParallelTo(line.Direction())) {
@@ -174,6 +190,17 @@ Eigen::Vector3d TriangleBounds::ClosestPoint(
     double v = vb * denom;
     double w = vc * denom;
     return v0_ + u_ * v + v_ * w;
+}
+
+Eigen::Vector3d TriangleBounds::FarthestPoint(
+        const Eigen::Vector3d& point) const {
+    Eigen::Vector3d vectors[]{v0_, v0_ + u_, v0_ + v_};
+    double distances[]{(point - vectors[0]).norm(), (point - vectors[1]).norm(),
+                       (point - vectors[2]).norm()};
+    if (distances[0] > distances[1] && distances[0] > distances[2])
+        return vectors[0];
+    if (distances[1] > distances[2]) return vectors[1];
+    return vectors[2];
 }
 
 }  // namespace geometry

@@ -69,6 +69,12 @@ public:
     bool IsPointInTriangle(const Eigen::Vector3d& point) const;
 
     /// \brief Performs an intersection between a Line3D (or one of its derived
+    /// classes, Ray3D or Segment3D) and returns a the intersection parameter if
+    /// the intersection exists. This function honors the semantics of the
+    /// different types of lines.
+    utility::optional<double> IntersectionParameter(const Line3D& line) const;
+
+    /// \brief Performs an intersection between a Line3D (or one of its derived
     /// classes, Ray3D or Segment3D) and returns a point if the intersection
     /// exists. This function honors the semantics of the different types of
     /// lines.
@@ -86,6 +92,10 @@ public:
     /// which may be any of the three vertices, may lie on any of the three
     /// edges, or lie somewhere on the face of the triangle.
     Eigen::Vector3d ClosestPoint(const Eigen::Vector3d& point) const;
+
+    /// \brief Calculates the furthest point on the triangle from the test
+    /// point, which will be one of the three vertices.
+    Eigen::Vector3d FarthestPoint(const Eigen::Vector3d& point) const;
 
     /// \brief Calculates the axis aligned bounding box for the underlying
     /// triangle
