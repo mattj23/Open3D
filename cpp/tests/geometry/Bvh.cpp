@@ -38,6 +38,7 @@ using BoxVec = std::vector<AABB>;
 
 using v_t = Eigen::Vector3d;
 using intr_t = std::tuple<v_t, v_t, std::vector<size_t>>;
+using cls_t = std::tuple<v_t, size_t>;
 
 AABB ShiftBox(Eigen::Index cardinal, double amount) {
     Vector3d v;
@@ -322,10 +323,11 @@ INSTANTIATE_TEST_CASE_P(Tests,
  * Use the point to AABB distance functions to test the closest and furthest
  * primitive check pruning
  */
+class BvhClosestTests : public TestWithParam<cls_t> {};
 
-TEST(BvhDistanceTests, TraverseClosest) {
+TEST_P(BvhClosestTests, PossibleClosests) {
     using namespace std;
-    Vector3d v{10, 0, 0};
+    Vector3d v = std::get<0>(GetParam());
 
     auto closest = [&v](const AABB& box) {
         // The closest point on the box is found by clamping the test point to
@@ -337,8 +339,8 @@ TEST(BvhDistanceTests, TraverseClosest) {
         return (c - v).norm();
     };
 
-    auto furthest = [&v](const AABB& box) {
-        // The furthest point on the AABB is always going to be one of the
+    auto farthest = [&v](const AABB& box) {
+        // The farthest point on the AABB is always going to be one of the
         // eight corners
         double dist = 0;
         for (const auto& p : box.GetBoxPoints()) {
@@ -355,8 +357,68 @@ TEST(BvhDistanceTests, TraverseClosest) {
     auto bvh = Bvh::CreateTopDown([&](size_t i) { return spheres[i].GetBox(); },
                                   spheres.size(), bvh::SplitOptions::None());
 
-    auto results = bvh->PossibleClosest(closest, furthest);
+    auto results = bvh->PossibleClosest(closest, farthest);
+
+    // Expect that the possible closest candidates contain the primitives which
+    // are actually closest to the test point
+    EXPECT_TRUE(std::find(results.begin(), results.end(),
+                          std::get<1>(GetParam())) != results.end());
 }
+
+INSTANTIATE_TEST_CASE_P(Tests,
+                        BvhClosestTests,
+                        Values(cls_t{{3, 0, 0}, 0},
+                               cls_t{{10, 0, 0}, 1},
+                               cls_t{{0, 5, 0}, 2},
+                               cls_t{{0, 11, 0}, 3},
+                               cls_t{{0, 0, 10}, 4},
+                               cls_t{{0, 0, 4}, 5}));
+
+class BvhFarthestTests : public TestWithParam<cls_t> {};
+
+TEST_P(BvhFarthestTests, PossibleFarthests) {
+    using namespace std;
+    Vector3d v = std::get<0>(GetParam());
+
+    auto closest = [&v](const AABB& box) {
+        // The closest point on the box is found by clamping the test point to
+        // the bounds
+        auto cx = max(min(v.x(), box.max_bound_.x()), box.min_bound_.x());
+        auto cy = max(min(v.y(), box.max_bound_.y()), box.min_bound_.y());
+        auto cz = max(min(v.z(), box.max_bound_.z()), box.min_bound_.z());
+        Vector3d c{cx, cy, cz};
+        return (c - v).norm();
+    };
+
+    auto farthest = [&v](const AABB& box) {
+        // The farthest point on the AABB is always going to be one of the
+        // eight corners
+        double dist = 0;
+        for (const auto& p : box.GetBoxPoints()) {
+            dist = std::max((p - v).norm(), dist);
+        }
+        return dist;
+    };
+
+    Spheres spheres{Sphere{{5, 0, 0}, 1}, Sphere{{6, 0, 0}, 1},
+                    Sphere{{0, 7, 0}, 1}, Sphere{{0, 9, 0}, 1},
+                    Sphere{{0, 0, 8}, 1}, Sphere{{0, 0, 6}, 1}};
+
+    // Create the BVH
+    auto bvh = Bvh::CreateTopDown([&](size_t i) { return spheres[i].GetBox(); },
+                                  spheres.size(), bvh::SplitOptions::None());
+
+    auto results = bvh->PossibleFarthest(closest, farthest);
+
+    EXPECT_TRUE(std::find(results.begin(), results.end(),
+                          std::get<1>(GetParam())) != results.end());
+}
+
+INSTANTIATE_TEST_CASE_P(Tests,
+                        BvhFarthestTests,
+                        Values(cls_t{{-10, 0, 0}, 1},
+                               cls_t{{0, -10, 0}, 3},
+                               cls_t{{0, 0, -10}, 4}));
 
 }  // namespace tests
 }  // namespace open3d

@@ -44,8 +44,7 @@ namespace geometry {
 /// \brief This is a general purpose Bounding Volume Hierarchy for
 /// non-specialized intersection and collision testing. This class should be
 /// used as a foundation for implementing a BVH for a concrete type, which
-/// should either inherit from or wrap this type.  This is not meant to be used
-/// directly.
+/// should either inherit from or wrap this type.
 ///
 /// The underlying primitives which are being partitioned by this BVH need to
 /// be accessible by an index of size_t, and they must be contiguous from 0 to
@@ -58,7 +57,7 @@ namespace geometry {
 /// BVH implementation only ever refers to indices of primitives which are
 /// represented by a size_t and in a contiguous range. While this conceptually
 /// maps to an array or a std::vector, there is no requirement that it be
-/// implemented as sucn. The calling code must provide function template
+/// implemented as such. The calling code must provide function template
 /// parameters which the BVH will use to retrieve bounding boxes for primitives
 /// by their size_t index.
 ///
@@ -67,10 +66,9 @@ namespace geometry {
 /// if they're maintained separately from primitives or if they're accessed
 /// directly as a property of the primitive, etc.
 ///
-/// Additionally, intersection and distance tests work the same way, using a
-/// template function to provide the interface for computing the interaction of
-/// the AABBs with any sort of test geometry. Indices for the candidate
-/// primitives are returned.
+/// Intersection and distance tests work the same way, using a template function
+/// to provide the interface for computing the interaction of the AABBs with any
+/// sort of test geometry. Indices for the candidate primitives are returned.
 ///
 /// \details This BVH implementation is meant to be a general purpose building
 /// block for creating bounding volume hierarchies for concrete types. It was
@@ -182,8 +180,9 @@ public:
     /// have child primitives)
     /// \param node a temporary reference to a BvhNode to be split
     /// \param box_fn a function which takes a size_t and returns the bounding
-    /// box for the primitive with that index \param options a SplitOptions
-    /// struct which will set the behavior for the splitting operation
+    /// box for the primitive with that index
+    /// \param options a SplitOptions struct which will set the behavior for the
+    /// splitting operation
     template <class Fn>
     static void SplitLeafObjMean(BvhNode& node,
                                  Fn box_func,
@@ -353,7 +352,7 @@ public:
     /// geometry.
     ///
     /// \details This method takes two function types, one which returns a
-    /// closest distance to a bounding box, and one which returns a furthest
+    /// closest distance to a bounding box, and one which returns a farthest
     /// distance from a bounding box. The algorithm will descend breadth first
     /// through the BVH using these functions on each node, maintaining track of
     /// the smallest *farthest* distance to any node visited so far. Any node
@@ -366,17 +365,48 @@ public:
     /// This method does not know or care what type of test geometry is wrapped
     /// inside the two function types. If ultimately your goal is to measure
     /// distances to the primitives from a point, then your functions must
-    /// return the closest and furthest distances between a point and an
+    /// return the closest and farthest distances between that point and an
     /// AxisAlignedBoundingBox. If your goal is to measure distances to the
     /// primitives from a line, then your functions must return the closest and
-    /// furthest distances between a *line* and an AxisAlignedBoundingBox.
+    /// farthest distances between that *line* and an AxisAlignedBoundingBox.
     /// Likewise with any other geometric construct. That is the only
     /// constraint.
     ///
     /// \return a vector with the primitive indices which may contain the
     /// closest distance
     template <class Fc, class Ff>
-    std::vector<size_t> PossibleClosest(Fc closest, Ff furthest);
+    std::vector<size_t> PossibleClosest(Fc closest, Ff farthest);
+
+    /// \brief Check the BVH for the indices of all possible primitives that
+    /// might be or contain the farthest geometry by some measure. This performs
+    /// a search which prunes nodes that cannot possibly contain the farthest
+    /// geometry.
+    ///
+    /// \details This method takes two function types, one which returns a
+    /// closest distance to a bounding box, and one which returns a farthest
+    /// distance from a bounding box. The algorithm will descend breadth first
+    /// through the BVH using these functions on each node, maintaining track of
+    /// the largest *closest* distance to any node visited so far. Any node
+    /// which does not have a *farthest* distance largest than this global
+    /// *closest* distance cannot possibly contain the farthest geometry, nor
+    /// can any of its children. Thus enormous amounts of the hierarchy can be
+    /// pruned from the check, and only primitives which reside in a node which
+    /// cannot be ruled out will be returned.
+    ///
+    /// This method does not know or care what type of test geometry is wrapped
+    /// inside the two function types. If ultimately your goal is to measure
+    /// distances to the primitives from a point, then your functions must
+    /// return the closest and furthest distances between that point and an
+    /// AxisAlignedBoundingBox. If your goal is to measure distances to the
+    /// primitives from a line, then your functions must return the closest and
+    /// furthest distances between that *line* and an AxisAlignedBoundingBox.
+    /// Likewise with any other geometric construct. That is the only
+    /// constraint.
+    ///
+    /// \return a vector with the primitive indices which may contain the
+    /// farthest distance
+    template <class Fc, class Ff>
+    std::vector<size_t> PossibleFarthest(Fc closest, Ff farthest);
 
     /// \brief A simple top-down construction method that builds a BVH
     ///
@@ -421,16 +451,15 @@ std::vector<size_t> Bvh::PossibleIntersections(F fn) {
 }
 
 template <class Fc, class Ff>
-std::vector<size_t> Bvh::PossibleClosest(Fc closest, Ff furthest) {
+std::vector<size_t> Bvh::PossibleClosest(Fc closest, Ff farthest) {
     /*
      * Closest distance pruning
      *
-     * The underlying principle is that out of any
-     * set of bounding boxes, one of them will have the smallest *furthest*
-     * distance from a given entity. Any bounding box which does not have a
-     * *closest* distance smaller than that threshold cannot possibly contain
-     * anything closer to the entity than the box which produced the
-     * threshold.
+     * The underlying principle is that out of any set of bounding boxes, one of
+     * them will have the smallest *farthest* distance from a given entity. Any
+     * bounding box which does not have a *closest* distance smaller than that
+     * threshold cannot possibly contain anything closer to the entity than the
+     * box which produced the threshold.
      */
     using std::find_if;
     using std::min;
@@ -443,7 +472,7 @@ std::vector<size_t> Bvh::PossibleClosest(Fc closest, Ff furthest) {
     };
 
     std::vector<search_t> nodes{
-            {closest(root_->Box()), furthest(root_->Box()), *root_}};
+            {closest(root_->Box()), farthest(root_->Box()), *root_}};
 
     double closest_furthest = nodes.front().far;
     while (true) {
@@ -455,10 +484,10 @@ std::vector<size_t> Bvh::PossibleClosest(Fc closest, Ff furthest) {
         }
 
         search_t left{closest(non_leaf->node.get().left_->Box()),
-                      furthest(non_leaf->node.get().left_->Box()),
+                      farthest(non_leaf->node.get().left_->Box()),
                       *non_leaf->node.get().left_};
         search_t right{closest(non_leaf->node.get().right_->Box()),
-                       furthest(non_leaf->node.get().right_->Box()),
+                       farthest(non_leaf->node.get().right_->Box()),
                        *non_leaf->node.get().right_};
         nodes.erase(non_leaf);
         nodes.push_back(left);
@@ -468,6 +497,67 @@ std::vector<size_t> Bvh::PossibleClosest(Fc closest, Ff furthest) {
         nodes.erase(remove_if(nodes.begin(), nodes.end(),
                               [&](const search_t& t) {
                                   return t.close > closest_furthest;
+                              }),
+                    nodes.end());
+    }
+
+    std::vector<size_t> indices;
+    for (const auto& n : nodes) {
+        for (auto i : n.node.get().indices_) {
+            indices.push_back(i);
+        }
+    }
+
+    return indices;
+}
+
+template <class Fc, class Ff>
+std::vector<size_t> Bvh::PossibleFarthest(Fc closest, Ff farthest) {
+    /*
+     * Farthest distance pruning
+     *
+     * The underlying principle is that out of any set of bounding boxes, one of
+     * them will have the largest *closest* distance from a given entity. Any
+     * bounding box which does not have a *farthest* distance larger than that
+     * threshold cannot possibly contain anything farther from the entity than
+     * the box which produced the threshold.
+     */
+    using std::find_if;
+    using std::max;
+    using std::remove_if;
+
+    struct search_t {
+        double close;
+        double far;
+        std::reference_wrapper<bvh::BvhNode> node;
+    };
+
+    std::vector<search_t> nodes{
+            {closest(root_->Box()), farthest(root_->Box()), *root_}};
+
+    double farthest_closest = nodes.front().close;
+    while (true) {
+        auto non_leaf = find_if(
+                nodes.begin(), nodes.end(),
+                [](const search_t& x) { return !x.node.get().IsLeaf(); });
+        if (non_leaf == nodes.end()) {
+            break;
+        }
+
+        search_t left{closest(non_leaf->node.get().left_->Box()),
+                      farthest(non_leaf->node.get().left_->Box()),
+                      *non_leaf->node.get().left_};
+        search_t right{closest(non_leaf->node.get().right_->Box()),
+                       farthest(non_leaf->node.get().right_->Box()),
+                       *non_leaf->node.get().right_};
+        nodes.erase(non_leaf);
+        nodes.push_back(left);
+        nodes.push_back(right);
+
+        farthest_closest = max(farthest_closest, max(left.close, right.close));
+        nodes.erase(remove_if(nodes.begin(), nodes.end(),
+                              [&](const search_t& t) {
+                                  return t.far < farthest_closest;
                               }),
                     nodes.end());
     }
