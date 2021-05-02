@@ -56,6 +56,7 @@ std::vector<double> TriangleMeshBvh::IntersectionParameters(const Line3D& line,
         auto result = triangles_[c].IntersectionParameter(line);
         if (result.has_value()) results.push_back(result.value());
     }
+    return results;
 }
 
 utility::optional<double> TriangleMeshBvh::LowestIntersectionParameter(
@@ -83,6 +84,7 @@ std::vector<Eigen::Vector3d> TriangleMeshBvh::Intersections(const Line3D& line,
         auto result = triangles_[c].Intersection(line);
         if (result.has_value()) results.push_back(result.value());
     }
+    return results;
 }
 
 bool TriangleMeshBvh::HasIntersectionWith(const Line3D& line,
@@ -99,7 +101,7 @@ bool TriangleMeshBvh::HasIntersectionWith(const Line3D& line,
 
 bool TriangleMeshBvh::IsPointInside(const Eigen::Vector3d& point,
                                     bool exact) const {
-    auto intersections = Intersections(Ray3D(point, {1, 0, 0}), exact);
+    auto intersections = Intersections(Ray3D(point, {1, 0.5, 0.25}), exact);
     return intersections.size() % 2 == 1;
 }
 

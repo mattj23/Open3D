@@ -157,6 +157,28 @@ INSTANTIATE_TEST_CASE_P(ClosestPoint,
                                 cp_t{{.1, 1.5, 1}, {0, 1, 0}},
                                 cp_t{{-.2, 1.1, -1}, {0, 1, 0}}));
 
+// Farthest point tests
+// ===========================================================================
+class TriangleFarthestPointTests : public TestWithParam<cp_t> {
+protected:
+    geometry::TriangleBounds triangle{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}};
+};
+
+TEST_P(TriangleFarthestPointTests, CorrectPoints) {
+    const auto& test = std::get<0>(GetParam());
+    const auto& expected = std::get<1>(GetParam());
+
+    auto result = triangle.FarthestPoint(test);
+
+    EXPECT_LT((expected - result).norm(), 0.0001);
+}
+
+INSTANTIATE_TEST_CASE_P(FarthestPoint,
+                        TriangleFarthestPointTests,
+                        Values( cp_t{{-1, 0, 0}, {1, 0, 0}},
+                                cp_t{{0, -1, 0}, {0, 1, 0}},
+                                cp_t{{1, 1, 0}, {0, 0, 0}}));
+
 // Intersection tests
 // ===========================================================================
 class SimpleTriangleTest : public TestWithParam<intr_t> {

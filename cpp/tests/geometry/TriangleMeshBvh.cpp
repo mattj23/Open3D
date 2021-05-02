@@ -28,16 +28,35 @@
 
 #include "tests/UnitTest.h"
 
-using namespace open3d::geometry;
 using namespace ::testing;
+using namespace open3d::geometry;
+using v_t = Eigen::Vector3d;
+using ins_t = std::tuple<v_t, bool>;
 
 namespace open3d {
 namespace geometry {
 
-TEST(TriangleMeshBvh, Creation) {
+// Inside Mesh tests
+// ===========================================================================
+class InsideTests : public TestWithParam<ins_t> {};
+
+TEST_P(InsideTests, CheckPointInside) {
+    const auto& point = std::get<0>(GetParam());
+    bool expected = std::get<1>(GetParam());
+
     auto mesh = TriangleMesh::CreateTorus();
     auto bvh = TriangleMeshBvh::TopDown(*mesh, {});
+
+    bool result = bvh.IsPointInside(point);
+    EXPECT_EQ(expected, result);
 }
+
+INSTANTIATE_TEST_CASE_P(InsideTests, InsideTests,
+                        Values( ins_t{{0, 0, 0}, false},
+                                ins_t{{0, -1, 0}, true},
+                                ins_t{{0, 0, 2}, false},
+                                ins_t{{0, 1, 0}, true}));
+
 
 }  // namespace geometry
 }  // namespace open3d
