@@ -46,5 +46,43 @@ TriangleMeshBvh TriangleMeshBvh::TopDown(const TriangleMesh& mesh,
 
     return bvh;
 }
+
+std::vector<Eigen::Vector3d> TriangleMeshBvh::Intersections(const Line3D& line,
+                                                            bool exact) const {
+    std::vector<Eigen::Vector3d> results;
+    auto candidates = bvh_->PossibleIntersections(
+            [&line, exact](const AxisAlignedBoundingBox& box) {
+                return exact ? line.ExactAABB(box).has_value()
+                             : line.SlabAABB(box).has_value();
+            });
+
+    for (auto c : candidates) {
+        auto result = triangles_[c].Intersection(line);
+        if (result.has_value()) results.push_back(result.value());
+    }
+}
+
+bool TriangleMeshBvh::HasIntersectionWith(const Line3D& line,
+                                          bool exact) const {
+    auto candidates = bvh_->PossibleIntersections(
+            [&line, exact](const AxisAlignedBoundingBox& box) {
+                return exact ? line.ExactAABB(box).has_value()
+                             : line.SlabAABB(box).has_value();
+            });
+
+    for (auto c : candidates) {
+        auto result = triangles_[c].Intersection(line);
+        if (result.has_value()) return true;
+    }
+
+    return false;
+}
+
+bool TriangleMeshBvh::IsPointInside(const Eigen::Vector3d& point,
+                                    bool exact) const {
+    auto intersections = Intersections(Ray3D(point, {1, 0, 0}), exact);
+    return intersections.size() % 2 == 1;
+}
+
 }  // namespace geometry
 }  // namespace open3d
