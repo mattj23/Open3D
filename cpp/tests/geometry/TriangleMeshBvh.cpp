@@ -32,6 +32,7 @@ using namespace ::testing;
 using namespace open3d::geometry;
 using v_t = Eigen::Vector3d;
 using ins_t = std::tuple<v_t, bool>;
+using hint_t = std::tuple<v_t, v_t, bool>;
 
 namespace open3d {
 namespace geometry {
@@ -56,6 +57,31 @@ INSTANTIATE_TEST_CASE_P(InsideTests, InsideTests,
                                 ins_t{{0, -1, 0}, true},
                                 ins_t{{0, 0, 2}, false},
                                 ins_t{{0, 1, 0}, true}));
+
+// Has Intersection tests
+// ===========================================================================
+class HasIntersectionTests : public TestWithParam<hint_t> {};
+
+TEST_P(HasIntersectionTests , CheckIntersection) {
+    const auto& point = std::get<0>(GetParam());
+    const auto& direction = std::get<1>(GetParam());
+    bool expected = std::get<2>(GetParam());
+
+    auto mesh = TriangleMesh::CreateBox();
+    auto bvh = TriangleMeshBvh::TopDown(*mesh, {});
+
+    Ray3D ray{point, direction};
+    bool result = bvh.HasIntersectionWith(ray, true);
+    EXPECT_EQ(expected, result);
+}
+
+INSTANTIATE_TEST_CASE_P(HasIntersectionTests, HasIntersectionTests,
+                        Values(
+                                hint_t({2, 0.5, 0.5}, {-1, 0, 0}, true),
+                                hint_t({-1, 0.5, 0.5}, {-1, 0, 0}, false),
+                                hint_t({-1, 0.5, 0.5}, {1, 0, 0}, true),
+                                hint_t({2, 0.5, 0.5}, {1, 0, 0}, false),
+                                hint_t({2, 0, 0}, {0, 0, 1}, false)));
 
 
 }  // namespace geometry

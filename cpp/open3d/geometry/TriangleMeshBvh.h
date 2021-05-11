@@ -84,10 +84,7 @@ public:
     /// produce valid results when the mesh is watertight and does not contain
     /// internal, enclosed faces.
     /// \param point A point to test
-    /// \param exact If true use the exact intersection method with the AABB,
-    /// otherwise uses the branchless slab method. See the Line3D class'
-    /// SlabAABB and ExactAABB methods for further information.
-    bool IsPointInside(const Eigen::Vector3d& point, bool exact = false) const;
+    bool IsPointInside(const Eigen::Vector3d& point) const;
 
     /// \brief Returns true if any triangle in the Bvh intersects with a test
     /// Line3D/Ray3D/Segment3D. This method will stop when the first

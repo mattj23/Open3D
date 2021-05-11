@@ -37,7 +37,7 @@ using AABB = AxisAlignedBoundingBox;
 using BoxVec = std::vector<AABB>;
 
 using v_t = Eigen::Vector3d;
-using intr_t = std::tuple<v_t, v_t, std::vector<size_t>>;
+using hint_t = std::tuple<v_t, v_t, std::vector<size_t>>;
 using cls_t = std::tuple<v_t, size_t>;
 
 AABB ShiftBox(Eigen::Index cardinal, double amount) {
@@ -285,7 +285,7 @@ TEST(Bvh, CreateTopDown) {
  * traversal method and check that potential intersections are correctly
  * pruned by the hierarchy.
  */
-class BvhIntersectionTests : public TestWithParam<intr_t> {};
+class BvhIntersectionTests : public TestWithParam<hint_t> {};
 
 TEST_P(BvhIntersectionTests, PossibleIntersections) {
     Ray3D ray{std::get<0>(GetParam()), std::get<1>(GetParam())};
@@ -313,11 +313,11 @@ TEST_P(BvhIntersectionTests, PossibleIntersections) {
 
 INSTANTIATE_TEST_CASE_P(Tests,
                         BvhIntersectionTests,
-                        Values(intr_t{{0, 0, 0}, {1, 0, 0}, {0, 1}},
-                               intr_t{{0, 0, 0}, {0, 0, 1}, {5, 4}},
-                               intr_t{{0, 0, 0}, {0, 1, 0}, {2, 3}},
-                               intr_t{{6, 0, 0}, {-6, 0, 7}, {0, 1, 4, 5}},
-                               intr_t{{0, 9, 0}, {0, -9, 7}, {2, 3, 4, 5}}));
+                        Values(hint_t{{0, 0, 0}, {1, 0, 0}, {0, 1}},
+                               hint_t{{0, 0, 0}, {0, 0, 1}, {5, 4}},
+                               hint_t{{0, 0, 0}, {0, 1, 0}, {2, 3}},
+                               hint_t{{6, 0, 0}, {-6, 0, 7}, {0, 1, 4, 5}},
+                               hint_t{{0, 9, 0}, {0, -9, 7}, {2, 3, 4, 5}}));
 
 /*
  * Use the point to AABB distance functions to test the closest and furthest

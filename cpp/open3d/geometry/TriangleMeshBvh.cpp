@@ -99,9 +99,17 @@ bool TriangleMeshBvh::HasIntersectionWith(const Line3D& line,
     return false;
 }
 
-bool TriangleMeshBvh::IsPointInside(const Eigen::Vector3d& point,
-                                    bool exact) const {
-    auto intersections = Intersections(Ray3D(point, {1, 0.5, 0.25}), exact);
+bool TriangleMeshBvh::IsPointInside(const Eigen::Vector3d& point) const {
+    // This test works by casting an infinite ray from the point of interest in
+    // an arbitrary direction and counting the number of intersections. If the
+    // point lies inside a watertight mesh there will be an odd number of
+    // intersections, if the point is on the outside the count will be even.
+
+    // In order to ensure that we can use the ultra-fast slab method for AABB
+    // to ray intersections, we will test against a ray that has some non-zero
+    // component in all three cartesian directions, avoiding the unreliable
+    // case where the ray lies in one of the AABB's planes.
+    auto intersections = Intersections(Ray3D(point, {1, 0.5, 0.25}));
     return intersections.size() % 2 == 1;
 }
 

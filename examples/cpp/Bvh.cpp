@@ -25,7 +25,7 @@
 // IN THE SOFTWARE.
 // ----------------------------------------------------------------------------
 
-#include "open3d/geometry/Bvh.h"
+#include "open3d/geometry/TriangleMeshBvh.h"
 
 #include <chrono>
 #include <memory>
@@ -62,20 +62,13 @@ int main(int argc, char** argv) {
     using namespace std::chrono;
 
     // Create a torus and a vector of triangle bounds
-    auto mesh = TriangleMesh::CreateTorus();
-    auto bounds = std::make_shared<std::vector<TriangleBounds>>();
+    auto mesh = TriangleMesh::CreateBox();
+    auto box = mesh->GetAxisAlignedBoundingBox();
+    auto extent = box.GetExtent();
+    printf("%f\n", extent.z());
+    auto bvh = TriangleMeshBvh::TopDown(*mesh, {});
 
-    for (auto t : mesh->triangles_) {
-        bounds->emplace_back(mesh->vertices_[t[0]], mesh->vertices_[t[1]],
-                             mesh->vertices_[t[2]]);
-    }
-
-    // Create a top down BVH
-    auto f = [](const TriangleBounds& tri) { return tri.GetBoundingBox(); };
-    auto bvh = Bvh<TriangleBounds>::CreateTopDown(f, bounds,
-                                                  bvh::SplitOptions::None());
-
-    Ray3D ray{{0, 0, 0}, {0, 1, 0}};
+    Ray3D ray{{0, 0, 0}, {1, 1, 1}};
 
     auto line = std::make_shared<LineSet>();
     line->points_.emplace_back(0, 0, 0);
@@ -88,18 +81,19 @@ int main(int argc, char** argv) {
     mesh->PaintUniformColor({.5, .5, .5});
     mesh->ComputeVertexNormals();
 
-    std::vector<std::shared_ptr<const Geometry>> geometries{mesh, line};
+    auto m2 = TriangleMesh::CreateCoordinateFrame();
+    std::vector<std::shared_ptr<const Geometry>> geometries{mesh, line, m2};
 
-    auto potential = bvh->PossibleIntersections(
-            [&ray](const AxisAlignedBoundingBox& box) {
-                return ray.SlabAABB(box).has_value();
-            });
-
-    for (auto i : potential) {
-        auto box = LineSet::CreateFromAxisAlignedBoundingBox(
-                (*bounds)[i].GetBoundingBox());
-        geometries.push_back(box);
-    }
+//    auto potential = bvh->PossibleIntersections(
+//            [&ray](const AxisAlignedBoundingBox& box) {
+//                return ray.SlabAABB(box).has_value();
+//            });
+//
+//    for (auto i : potential) {
+//        auto box = LineSet::CreateFromAxisAlignedBoundingBox(
+//                (*bounds)[i].GetBoundingBox());
+//        geometries.push_back(box);
+//    }
 
     //    std::function<void(const bvh::BvhNode<TriangleBounds>&)> recurse;
     //    recurse = [&geometries,
